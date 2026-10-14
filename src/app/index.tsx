@@ -29,7 +29,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import UstMapSvg from '../../assets/images/ust.svg';
 import BuildingLabels from '../components/BuildingLabels';
@@ -915,37 +914,6 @@ export default function HomeScreen() {
                 color="#FFFFFF"
               />
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* HEADER */}
-        <SafeAreaView style={styles.headerWrapper} pointerEvents="box-none">
-          <View style={styles.headerCard}>
-            <View style={styles.brandContainer}>
-              <View style={styles.logoContainer}>
-                <MaterialCommunityIcons name="shield-check" size={20} color="#FFFFFF" />
-              </View>
-              <View>
-                <Text style={styles.brand}>
-                  Toma<Text style={styles.brandAccent}>Safe</Text>
-                </Text>
-                <Text style={styles.subText}>CAMPUS EVACUATION</Text>
-              </View>
-            </View>
-            <View style={styles.mapBadge}>
-              <MaterialCommunityIcons name="map-outline" size={14} color="#2563EB" />
-              <Text style={styles.mapBadgeText}>
-                {isTestRoute && activeRoute?.success ? 'DEMO' : 'MAP'}
-              </Text>
-            </View>
-          </View>
-        </SafeAreaView>
-
-        {/* GPS STATUS */}
-        {!(isTestRoute && activeRoute?.success) && (
-          <View style={styles.locationStatus}>
-            <View style={[styles.statusDot, { backgroundColor: status.color }]} />
-            <Text style={styles.locationStatusText}>{status.text}</Text>
           </View>
         )}
 
