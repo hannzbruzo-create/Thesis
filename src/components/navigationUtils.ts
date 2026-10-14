@@ -1,17 +1,34 @@
-// navigationUtils.ts
+
 //
-// Outdoor-only navigation version.
-// Indoor room, door, hallway, and Angelico test nodes are temporarily removed.
+// navigationUtils.ts
+// TomaSafe — Outdoor Evacuation Pathfinding
+//
+// Coordinates are normalized from 0–100.
+// Original UST SVG viewBox: 0 0 800 800.
+//
+// First graph:
+// N2, N3, N4 = Building exits
+// N5 = Evacuation Area 1 access
+//
+
+// ============================================
+// TYPES
+// ============================================
 
 export type MapPoint = {
   x: number;
   y: number;
 };
 
-export type Node = {
-  x: number;
-  y: number;
+export type Node = MapPoint & {
+  id: string;
   name: string;
+  type:
+    | 'exit'
+    | 'walkway'
+    | 'turn'
+    | 'intersection'
+    | 'evac-access';
   isExit?: boolean;
 };
 
@@ -26,6 +43,9 @@ export type RouteResult =
       startNodeId: string;
       exitNodeId: string;
       exitName: string;
+      evacuationAreaId: string;
+      evacuationAreaName: string;
+      destinationNodeId: string;
       distance: number;
       path: string[];
       points: MapPoint[];
@@ -36,6 +56,10 @@ export type RouteResult =
       message: string;
     };
 
+// ============================================
+// CAMPUS GPS BOUNDARIES
+// ============================================
+
 export const CAMPUS_LIMITS = {
   north: 13.165857,
   south: 13.162422,
@@ -43,11 +67,73 @@ export const CAMPUS_LIMITS = {
   east: 123.751555,
 };
 
-// Add only OUTDOOR path nodes here later.
-export const NODES: Record<string, Node> = {};
+// ============================================
+// OUTDOOR GRAPH NODES
+// ============================================
 
-// Add only OUTDOOR path edges here later.
-export const EDGES: Edge[] = [];
+export const NODES: Record<string, Node> = {
+  N2: {
+    id: 'N2',
+    name: 'Building Exit N2',
+    x: 29.8613,
+    y: 82.4775,
+    type: 'exit',
+    isExit: true,
+  },
+
+  N3: {
+    id: 'N3',
+    name: 'Building Exit N3',
+    x: 32.4162,
+    y: 82.5613,
+    type: 'exit',
+    isExit: true,
+  },
+
+  N4: {
+    id: 'N4',
+    name: 'Building Exit N4',
+    x: 34.8612,
+    y: 82.6162,
+    type: 'exit',
+    isExit: true,
+  },
+
+  N5: {
+    id: 'N5',
+    name: 'Evacuation Area 1 Access',
+    x: 32.6112,
+    y: 74.45,
+    type: 'evac-access',
+  },
+};
+
+// ============================================
+// OUTDOOR GRAPH EDGES
+// Bidirectional approved connections
+// ============================================
+
+export const EDGES: Edge[] = [
+  { from: 'N2', to: 'N3' },
+  { from: 'N3', to: 'N4' },
+  { from: 'N3', to: 'N5' },
+];
+
+// ============================================
+// EVACUATION DESTINATIONS
+// ============================================
+
+export const EVACUATION_TARGETS = {
+  EVAC_AREA_1: {
+    id: 'EVAC_AREA_1',
+    name: 'Evacuation Area 1',
+    accessNodeIds: ['N5'],
+  },
+};
+
+// ============================================
+// GPS TO MAP POSITION
+// ============================================
 
 export function gpsToMapPosition(
   latitude: number,
@@ -76,15 +162,23 @@ export function gpsToMapPosition(
   };
 }
 
+// ============================================
+// MAP DISTANCE
+// ============================================
+
 export function getMapDistance(
   a: MapPoint,
   b: MapPoint
 ) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-
-  return Math.sqrt(dx * dx + dy * dy);
+  return Math.hypot(
+    b.x - a.x,
+    b.y - a.y
+  );
 }
+
+// ============================================
+// MAP POSITION TO GPS
+// ============================================
 
 function mapPositionToGps(point: MapPoint) {
   const longitude =
@@ -103,6 +197,10 @@ function mapPositionToGps(point: MapPoint) {
   };
 }
 
+// ============================================
+// HAVERSINE DISTANCE (METERS)
+// ============================================
+
 export function getDistanceInMeters(
   a: MapPoint,
   b: MapPoint
@@ -111,6 +209,7 @@ export function getDistanceInMeters(
   const gpsB = mapPositionToGps(b);
 
   const earthRadius = 6371000;
+
   const toRadians = (value: number) =>
     (value * Math.PI) / 180;
 
@@ -141,6 +240,10 @@ export function getDistanceInMeters(
   return earthRadius * angularDistance;
 }
 
+// ============================================
+// FIND NEAREST NODE
+// ============================================
+
 export function findNearestNode(
   point: MapPoint
 ) {
@@ -148,7 +251,10 @@ export function findNearestNode(
   let nearestDistance = Infinity;
 
   for (const [nodeId, node] of Object.entries(NODES)) {
-    const distance = getMapDistance(point, node);
+    const distance = getDistanceInMeters(
+      point,
+      node
+    );
 
     if (distance < nearestDistance) {
       nearestDistance = distance;
@@ -158,6 +264,40 @@ export function findNearestNode(
 
   return nearestNodeId;
 }
+
+// ============================================
+// FIND NEAREST BUILDING EXIT
+// Used as a temporary GPS-based start choice.
+// ============================================
+
+export function findNearestExitNode(
+  point: MapPoint
+) {
+  let nearestExitId: string | null = null;
+  let nearestDistance = Infinity;
+
+  for (const [nodeId, node] of Object.entries(NODES)) {
+    if (!node.isExit) {
+      continue;
+    }
+
+    const distance = getDistanceInMeters(
+      point,
+      node
+    );
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestExitId = nodeId;
+    }
+  }
+
+  return nearestExitId;
+}
+
+// ============================================
+// GET CONNECTED NEIGHBORS
+// ============================================
 
 function getNeighbors(nodeId: string) {
   const currentNode = NODES[nodeId];
@@ -202,10 +342,21 @@ function getNeighbors(nodeId: string) {
   return neighbors;
 }
 
+// ============================================
+// DIJKSTRA SHORTEST PATH
+// ============================================
+
 function dijkstra(
   startNodeId: string,
   endNodeId: string
 ) {
+  if (
+    !NODES[startNodeId] ||
+    !NODES[endNodeId]
+  ) {
+    return null;
+  }
+
   const distances: Record<string, number> = {};
   const previous: Record<string, string | null> = {};
   const unvisited = new Set(Object.keys(NODES));
@@ -230,7 +381,7 @@ function dijkstra(
 
     if (
       currentNodeId === null ||
-      smallestDistance === Infinity
+      !Number.isFinite(smallestDistance)
     ) {
       break;
     }
@@ -263,14 +414,14 @@ function dijkstra(
     }
   }
 
-  if (distances[endNodeId] === Infinity) {
+  if (!Number.isFinite(distances[endNodeId])) {
     return null;
   }
 
   const path: string[] = [];
   let current: string | null = endNodeId;
 
-  while (current) {
+  while (current !== null) {
     path.unshift(current);
     current = previous[current];
   }
@@ -281,55 +432,38 @@ function dijkstra(
   };
 }
 
-export function calculateNearestExit(
-  userPosition: MapPoint
+// ============================================
+// CALCULATE ROUTE FROM A KNOWN EXIT
+// ============================================
+
+export function calculateOutdoorRoute(
+  startNodeId: string,
+  evacuationAreaId: keyof typeof EVACUATION_TARGETS =
+    'EVAC_AREA_1'
 ): RouteResult {
-  if (
-    Object.keys(NODES).length === 0 ||
-    EDGES.length === 0
-  ) {
+  const startNode = NODES[startNodeId];
+  const target = EVACUATION_TARGETS[evacuationAreaId];
+
+  if (!startNode?.isExit || !target) {
     return {
       success: false,
       message:
-        'Outdoor navigation nodes have not been added yet.',
-    };
-  }
-
-  const startNodeId =
-    findNearestNode(userPosition);
-
-  if (!startNodeId) {
-    return {
-      success: false,
-      message:
-        'Could not find a nearby outdoor navigation node.',
-    };
-  }
-
-  const exitIds = Object.entries(NODES)
-    .filter(([, node]) => node.isExit)
-    .map(([nodeId]) => nodeId);
-
-  if (exitIds.length === 0) {
-    return {
-      success: false,
-      message:
-        'No outdoor exit nodes have been defined yet.',
+        'Invalid building exit or evacuation area.',
     };
   }
 
   let bestRoute:
     | {
-        exitNodeId: string;
+        destinationNodeId: string;
         distance: number;
         path: string[];
       }
     | null = null;
 
-  for (const exitNodeId of exitIds) {
+  for (const destinationId of target.accessNodeIds) {
     const result = dijkstra(
       startNodeId,
-      exitNodeId
+      destinationId
     );
 
     if (!result) {
@@ -337,11 +471,11 @@ export function calculateNearestExit(
     }
 
     if (
-      !bestRoute ||
+      bestRoute === null ||
       result.distance < bestRoute.distance
     ) {
       bestRoute = {
-        exitNodeId,
+        destinationNodeId: destinationId,
         distance: result.distance,
         path: result.path,
       };
@@ -352,34 +486,93 @@ export function calculateNearestExit(
     return {
       success: false,
       message:
-        'No reachable outdoor exit was found.',
+        'No approved connected route was found to the evacuation area.',
     };
   }
 
-  const points: MapPoint[] = [
-    userPosition,
-    ...bestRoute.path.map(nodeId => ({
+  // Start the route at the building exit.
+  // Do not draw a straight line through a
+  // building from an uncertain GPS point.
+
+  const points: MapPoint[] = bestRoute.path.map(
+    nodeId => ({
       x: NODES[nodeId].x,
       y: NODES[nodeId].y,
-    })),
-  ];
+    })
+  );
 
   return {
     success: true,
+
     startNodeId,
-    exitNodeId: bestRoute.exitNodeId,
-    exitName: NODES[bestRoute.exitNodeId].name,
+
+    // Kept for compatibility with index.tsx.
+    exitNodeId: startNodeId,
+    exitName: target.name,
+
+    evacuationAreaId: target.id,
+    evacuationAreaName: target.name,
+    destinationNodeId: bestRoute.destinationNodeId,
+
     distance: bestRoute.distance,
+
     path: bestRoute.path,
     points,
+
     pathString: points
       .map(point => `${point.x},${point.y}`)
       .join(' '),
   };
 }
 
+// ============================================
+// GPS-BASED START NODE (PROTOTYPE)
+// ============================================
+
 export function calculateShortestPath(
   userPosition: MapPoint
 ): RouteResult {
-  return calculateNearestExit(userPosition);
+  if (
+    Object.keys(NODES).length === 0 ||
+    EDGES.length === 0
+  ) {
+    return {
+      success: false,
+      message:
+        'Outdoor evacuation graph has not been mapped yet.',
+    };
+  }
+
+  // For initial testing, use the nearest
+  // mapped building exit as the route start.
+  //
+  // Before deployment, replace this automatic
+  // choice with the user's confirmed exit
+  // or an officially assigned exit.
+
+  const startNodeId =
+    findNearestExitNode(userPosition);
+
+  if (!startNodeId) {
+    return {
+      success: false,
+      message:
+        'No mapped building exit is available.',
+    };
+  }
+
+  return calculateOutdoorRoute(
+    startNodeId,
+    'EVAC_AREA_1'
+  );
+}
+
+// ============================================
+// LEGACY FUNCTION COMPATIBILITY
+// ============================================
+
+export function calculateNearestExit(
+  userPosition: MapPoint
+): RouteResult {
+  return calculateShortestPath(userPosition);
 }

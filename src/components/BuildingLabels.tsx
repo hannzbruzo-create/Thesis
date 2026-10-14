@@ -21,19 +21,19 @@ type BuildingLabelsProps = {
 export const BUILDING_LABELS: BuildingLabel[] = [
   {
     id: 'angelico',
-    name: 'Angelico',
+    name: 'Fra. Angelico BLDG',
     x: 26.48,
     y: 83.97,
   },
   {
     id: 'aquinas',
-    name: 'Aquinas',
+    name: 'ST. Thomas Aquinas BLDG',
     x: 77.72,
     y: 66.90,
   },
   {
     id: 'martin',
-    name: 'Martin',
+    name: 'ST. Martin BLDG',
     x: 67.35,
     y: 15.50,
   },
@@ -51,7 +51,7 @@ export const BUILDING_LABELS: BuildingLabel[] = [
   },
   {
     id: 'pius',
-    name: 'Pius V',
+    name: 'ST. Pius V Hall',
     x: 51.10,
     y: 38.73,
   },
@@ -63,25 +63,25 @@ export const BUILDING_LABELS: BuildingLabel[] = [
   },
   {
     id: 'rose-delima',
-    name: 'Rose de Lima',
+    name: 'STA. Rose de Lima BLDG',
     x: 32.85,
     y: 9.25,
   },
   {
     id: 'chapel',
-    name: 'Chapel',
+    name: 'ST. Thomas Chapel',
     x: 25.60,
     y: 52.75,
   },
   {
     id: 'dome',
-    name: 'Dome',
+    name: 'AQ Dome',
     x: 45.60,
     y: 84.12,
   },
   {
     id: 'dominic',
-    name: 'Dominic',
+    name: 'ST. Dominic BLDG',
     x: 70.47,
     y: 39.75,
   },

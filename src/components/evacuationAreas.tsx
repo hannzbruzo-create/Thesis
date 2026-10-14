@@ -1,168 +1,97 @@
-import {
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  cancelAnimation, Easing, useAnimatedProps, useSharedValue, withRepeat, withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle, Polygon } from 'react-native-svg';
+import { EVACUATION_AREAS } from './evacuationData';
 
-import Svg, {
-  Polygon,
-} from 'react-native-svg';
-
-import {
-  EVACUATION_AREAS,
-} from './evacuationData';
-
-type EvacuationAreasProps = {
+type Props = {
   mapSize: number;
   activeAreaId?: string | null;
+  /** Show all OTHER polygons faintly when a route is active. Default false. */
+  showAllAreas?: boolean;
 };
+const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-export default function EvacuationAreas({
-  mapSize,
-  activeAreaId = null,
-}: EvacuationAreasProps) {
-  // Hide evacuation areas completely
-  // until navigation selects one.
-  if (!activeAreaId) {
-    return null;
-  }
+/** SVG-only, simple, lightweight area visualization. Hidden before navigation. */
+export default function EvacuationAreas({ mapSize, activeAreaId = null, showAllAreas = false }: Props) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (activeAreaId) {
+      pulse.value = withRepeat(withTiming(1, {
+        duration: 2800,
+        easing: Easing.inOut(Easing.ease),
+      }), -1, true);
+    } else {
+      cancelAnimation(pulse);
+      pulse.value = 0;
+    }
+    return () => cancelAnimation(pulse);
+  }, [activeAreaId]);
 
-  // Find only the evacuation area
-  // selected by the routing algorithm.
-  const activeArea =
-    EVACUATION_AREAS.find(
-      (area) =>
-        area.id === activeAreaId
-    );
+  const highlightedProps = useAnimatedProps(() => ({
+    fillOpacity: 0.085 + pulse.value * 0.04,
+    strokeOpacity: 0.36 + pulse.value * 0.10,
+  }));
+  const ringProps = useAnimatedProps(() => ({
+    r: 1.65 + pulse.value * 0.65,
+    strokeOpacity: 0.22 - pulse.value * 0.14,
+  }));
 
-  // Safety check in case an invalid ID is passed.
-  if (!activeArea) {
-    return null;
-  }
+  // TomaSafe currently hides evacuation polygons before route calculation.
+  if (!activeAreaId) return null;
 
-  const points =
-    activeArea.polygon
-      .map(
-        (point) =>
-          `${point.x},${point.y}`
-      )
-      .join(' ');
+  const selected = EVACUATION_AREAS.find(a => a.id === activeAreaId);
+  const displayed = showAllAreas ? EVACUATION_AREAS : EVACUATION_AREAS.filter(a => a.id === activeAreaId);
+  const polygonPoints = (p: { x: number; y: number }[]) => p.map(v => `${v.x},${v.y}`).join(' ');
 
   return (
     <>
-      {/* ================================= */}
-      {/* EVACUATION AREA POLYGON */}
-      {/* ================================= */}
-
       <Svg
-        width={mapSize}
-        height={mapSize}
-        viewBox="0 0 100 100"
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
+        width={mapSize} height={mapSize} viewBox="0 0 100 100"
+        pointerEvents="none" style={StyleSheet.absoluteFill}
       >
-        {/* Soft white outline */}
-        <Polygon
-          points={points}
-          fill="none"
-          stroke="rgba(255,255,255,0.90)"
-          strokeWidth={0.9}
-          strokeLinejoin="round"
-        />
-
-        {/* Active evacuation area */}
-        <Polygon
-          points={points}
-          fill="rgba(34,197,94,0.30)"
-          stroke="#15803D"
-          strokeWidth={0.45}
-          strokeLinejoin="round"
-        />
+        {displayed.filter(a => a.id !== activeAreaId).map(area => (
+          <Polygon
+            key={area.id}
+            points={polygonPoints(area.polygon)}
+            fill="#16A34A" fillOpacity={0.055}
+            stroke="#15803D" strokeOpacity={0.35}
+            strokeWidth={0.18} strokeLinejoin="round"
+          />
+        ))}
+        {selected && (
+          <>
+            <AnimatedPolygon
+              points={polygonPoints(selected.polygon)}
+              fill="#16A34A" stroke="#15803D" strokeWidth={0.25}
+              strokeLinejoin="round" animatedProps={highlightedProps}
+            />
+            <AnimatedCircle
+              cx={selected.center.x} cy={selected.center.y}
+              fill="none" stroke="#16A34A" strokeWidth={0.19}
+              animatedProps={ringProps}
+            />
+          </>
+        )}
       </Svg>
-
-      {/* ================================= */}
-      {/* EVACUATION AREA MARKER */}
-      {/* ================================= */}
-
-      <View
-        pointerEvents="none"
-        style={[
+      {selected && (
+        <View pointerEvents="none" style={[
           styles.markerPosition,
-          {
-            left:
-              (activeArea.center.x /
-                100) *
-              mapSize,
-
-            top:
-              (activeArea.center.y /
-                100) *
-              mapSize,
-          },
-        ]}
-      >
-        <View
-          style={styles.activeMarker}
-        >
-          <Text
-            style={styles.activeCheck}
-          >
-            ✓
-          </Text>
+          { left: selected.center.x / 100 * mapSize, top: selected.center.y / 100 * mapSize },
+        ]}>
+          <View style={styles.activeMarker}><Text style={styles.activeCheck}>✓</Text></View>
         </View>
-      </View>
+      )}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  markerPosition: {
-    position: 'absolute',
-
-    transform: [
-      {
-        translateX: -14,
-      },
-      {
-        translateY: -14,
-      },
-    ],
-
-    zIndex: 25,
-  },
-
-  activeMarker: {
-    width: 28,
-    height: 28,
-
-    borderRadius: 14,
-
-    backgroundColor: '#16A34A',
-
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    elevation: 4,
-
-    shadowColor: '#000000',
-
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-
-    shadowOpacity: 0.18,
-    shadowRadius: 2,
-  },
-
-  activeCheck: {
-    color: '#FFFFFF',
-
-    fontSize: 14,
-
-    fontWeight: '900',
-  },
+  markerPosition: { position: 'absolute', transform: [{ translateX: -14 }, { translateY: -14 }], zIndex: 25 },
+  activeMarker: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#16A34A', borderWidth: 2,
+    borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 2 },
+  activeCheck: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
 });
