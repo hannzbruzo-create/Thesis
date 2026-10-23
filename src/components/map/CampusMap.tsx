@@ -20,6 +20,23 @@ import styles from '../../styles/map/CampusMap.styles';
 // 800x800 SOURCE COORDINATES ARE UNCHANGED.
 const MAP_SIZE = 1200;
 
+// GPS fixes can arrive every second. These huge/static map layers must not
+// reconcile thousands of SVG elements each time the blue marker changes.
+const StaticCampusBase = React.memo(function StaticCampusBase() {
+  return (
+    <>
+      <CampusContext mapSize={MAP_SIZE} />
+      <CampusSVG width={MAP_SIZE} height={MAP_SIZE} pointerEvents="none" style={styles.campus} />
+    </>
+  );
+});
+const StaticBuildings = React.memo(function StaticBuildings() {
+  return <Building3D mapSize={MAP_SIZE} />;
+});
+const StaticMapFade = React.memo(function StaticMapFade() {
+  return <CampusFadeOverlay mapSize={MAP_SIZE} />;
+});
+
 type Props = {
   start: GraphNode | null;
   startPoint?: Point | null;
@@ -30,8 +47,9 @@ type Props = {
   showGraph: boolean;
   onMapTap: (point: Point) => void;
   liveGps?: boolean;
+  animateRoute?: boolean;
 };
-export default function CampusMap({start,startPoint,startOnPath=false,focusRequest,onFocusSettled,plan,showGraph,onMapTap,liveGps=false}:Props) {
+export default function CampusMap({start,startPoint,startOnPath=false,focusRequest,onFocusSettled,plan,showGraph,onMapTap,liveGps=false,animateRoute=false}:Props) {
   const camera = useCampusCamera(onMapTap);
 
   useEffect(() => {
@@ -48,13 +66,12 @@ export default function CampusMap({start,startPoint,startOnPath=false,focusReque
           {/* Single native layer: pan + zoom + perspective/tilt commit together.
               This avoids a one-frame wobble between separate native views. */}
           <Animated.View style={[styles.mapPanLayer, styles.mapZoomLayer, camera.mapStyle]}>
-              <CampusContext mapSize={MAP_SIZE} />
-              <CampusSVG width={MAP_SIZE} height={MAP_SIZE} pointerEvents="none" style={styles.campus} />
+              <StaticCampusBase />
               <Animated.View pointerEvents="none" style={[styles.layer, camera.depthStyle]}>
-                <Building3D mapSize={MAP_SIZE} />
+                <StaticBuildings />
               </Animated.View>
-              <CampusFadeOverlay mapSize={MAP_SIZE} />
-              <RoutePreviewOverlay mapSize={MAP_SIZE} start={start} startPoint={startPoint} startOnPath={startOnPath} plan={plan} showGraph={showGraph} liveGps={liveGps} />
+              <StaticMapFade />
+              <RoutePreviewOverlay mapSize={MAP_SIZE} start={start} startPoint={startPoint} startOnPath={startOnPath} plan={plan} showGraph={showGraph} liveGps={liveGps} animateRoute={animateRoute} />
               <BuildingLabels mapSize={MAP_SIZE} zoomLevel={camera.zoomDisplay} />
               {/* Keep the destination on the SAME native map plane as the route.
                   Do not project it into screen space separately: perspective +
@@ -73,9 +90,10 @@ export default function CampusMap({start,startPoint,startOnPath=false,focusReque
         tilted={camera.isTilted}
         onZoomIn={camera.zoomIn}
         onZoomOut={camera.zoomOut}
-        onReset={camera.resetView}
+        onReset={liveGps && startPoint ? () => camera.focusOnPoint(startPoint) : camera.resetView}
         onFitCampus={camera.fitCampus}
         onToggleTilt={camera.toggleTilt}
+        hasLiveLocation={Boolean(liveGps && startPoint)}
       />
     </GestureHandlerRootView>
   );

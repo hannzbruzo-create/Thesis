@@ -10,8 +10,8 @@ export const CAMPUS_BOUNDS = {
 } as const;
 
 export const MAX_ROUTE_GPS_ACCURACY_M = 18;
-export const MIN_REROUTE_MOVEMENT_M = 4;
-export const MIN_REROUTE_INTERVAL_MS = 3000;
+export const MIN_REROUTE_MOVEMENT_M = 2.5;
+export const MIN_REROUTE_INTERVAL_MS = 1600;
 
 export type GpsFix = {
   latitude: number;
@@ -92,7 +92,7 @@ export function screenOutdoorFix(fix: GpsFix): {
     const nearestLatitude = Math.max(CAMPUS_BOUNDS.south,Math.min(CAMPUS_BOUNDS.north,latitude));
     const nearestLongitude = Math.max(CAMPUS_BOUNDS.west,Math.min(CAMPUS_BOUNDS.east,longitude));
     const beyondMeters = distanceMeters({latitude,longitude},{latitude:nearestLatitude,longitude:nearestLongitude});
-    if (beyondMeters <= accuracy + 5) {
+    if (beyondMeters <= accuracy + 12) {
       return {usable:false,point:null,code:'near-boundary',reason:
         'You are near the mapped campus boundary. We cannot confirm that you are inside Rawis Campus. Move to a known outdoor campus walkway and retry.'};
     }
@@ -100,15 +100,12 @@ export function screenOutdoorFix(fix: GpsFix): {
       'Outside the mapped UST–Legazpi Rawis Campus area. This evacuation map works only when you are inside the campus.'};
   }
   if (allObstacles.some(poly => polygonNear(point, poly))) {
-    return {usable:false,point:null,code:'blocked',reason:
-      'GPS position overlaps a mapped building or blocked area. Outdoor routing is paused.'};
+    return {usable:false,point,code:'blocked',reason:
+      'GPS may be drifting onto a building. Keeping the last verified outdoor route.'};
   }
-  const latMetersPerMapUnit = (CAMPUS_BOUNDS.north-CAMPUS_BOUNDS.south)*111000/800;
-  const margin = Math.max(3, Math.min(9, accuracy / latMetersPerMapUnit * 0.35));
-  if (allObstacles.some(poly => polygonNear(point,poly,margin))) {
-    return {usable:false,point:null,code:'near-building',reason:
-      'GPS is too close to a mapped building. Move to a clear outdoor area before routing.'};
-  }
+  // Proximity alone must never switch off routing: GPS commonly drifts
+  // several metres near walls (multipath/reflections). Only a point actually
+  // INSIDE a mapped obstruction is flagged as uncertain above.
   return {usable:true,point,code:'ok',reason:
     'GPS is within the approximate mapped outdoor area; this is not proof of physical location.'};
 }

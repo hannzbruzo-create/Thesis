@@ -22,6 +22,7 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
     let active = true;
     let subscription: Location.LocationSubscription | null = null;
     let serial = 0;
+    let lastSmoothed: GpsFix | null = null;
     const stop = () => { ++serial; subscription?.remove(); subscription = null; };
 
     const begin = async () => {
@@ -31,34 +32,57 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (!active || turn !== serial) return;
         if (status !== 'granted') {
-          setState({phase:'permission-denied', fix:null,
-            message:'Location permission denied. Allow TomaSafe to access location in Settings.'});
+          setState(previous=>({...previous,phase:'permission-denied',
+            message:'Location permission denied. Allow TomaSafe to access location in Settings.'}));
           return;
         }
         if (!await Location.hasServicesEnabledAsync()) {
-          if (active) setState({phase:'unavailable', fix:null, message:'Turn on device Location services.'});
+          if (active) setState(previous=>({...previous,phase:'unavailable',message:'Turn on device Location services.'}));
           return;
         }
         if (!active || turn !== serial) return;
-        setState({phase:'searching', fix:null, message:'Waiting for a fresh GPS position...'});
+        setState(previous => ({...previous, phase:'searching', message:'Waiting for a fresh GPS position...'}));
         const watcher = await Location.watchPositionAsync({
-          accuracy: Location.Accuracy.High,
-          timeInterval: 2500,
-          distanceInterval: 2.5,
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000,
+          distanceInterval: 0,
           mayShowUserSettingsDialog: true,
         }, location => {
           if (!active || turn !== serial) return;
           const { latitude, longitude, accuracy } = location.coords;
           // Never use an invalid or cached bad fix to redraw a route.
           if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-          setState({phase:'tracking', message:'Receiving live GPS updates',
-            fix:{latitude,longitude,accuracy,timestamp:location.timestamp}});
+          const now = Date.now();
+          // Drop stale/out-of-order provider samples; keep live marker responsive.
+          if (now - location.timestamp > 12000 ||
+              (lastSmoothed && location.timestamp <= lastSmoothed.timestamp)) return;
+          const raw: GpsFix = {latitude, longitude, accuracy, timestamp:location.timestamp};
+          let fix = raw;
+          if (lastSmoothed) {
+            const dt = Math.max(0.1, (raw.timestamp-lastSmoothed.timestamp)/1000);
+            const meters = Math.hypot(
+              (raw.latitude-lastSmoothed.latitude)*111000,
+              (raw.longitude-lastSmoothed.longitude)*108000
+            );
+            // Reject one-off physically implausible jumps but allow reacquisition
+            // after the device has been without a GPS fix for several seconds.
+            if (dt < 5 && meters > Math.max(40, dt * 12 + 25)) return;
+            // Light adaptive smoothing, not a multi-second lagging average.
+            const alpha = accuracy != null && accuracy > 12 ? 0.60 : 0.85;
+            fix = {
+              ...raw,
+              latitude:lastSmoothed.latitude+(latitude-lastSmoothed.latitude)*alpha,
+              longitude:lastSmoothed.longitude+(longitude-lastSmoothed.longitude)*alpha,
+            };
+          }
+          lastSmoothed=fix;
+          setState({phase:'tracking', message:'Receiving live GPS updates', fix});
         });
         if (!active || turn !== serial) watcher.remove();
         else subscription = watcher;
       } catch (err) {
-        if (active && turn === serial) setState({phase:'error', fix:null,
-          message:err instanceof Error ? err.message : 'GPS unavailable on this device.'});
+        if (active && turn === serial) setState(previous=>({...previous,phase:'error',
+          message:err instanceof Error ? err.message : 'GPS unavailable on this device.'}));
       }
     };
 
@@ -66,13 +90,13 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
       if (!active) return;
       if (next !== 'active') {
         stop();
-        setState({phase:'background', fix:null, message:'GPS paused while the app is in the background.'});
+        setState(previous=>({...previous, phase:'background', message:'GPS paused. Keeping the last verified route.'}));
       } else {
         void begin(); // restart with a fresh fix after returning to foreground
       }
     });
     if (AppState.currentState === 'active') void begin();
-    else setState({phase:'background',fix:null,message:'GPS starts when TomaSafe is in the foreground.'});
+    else setState(previous=>({...previous,phase:'background',message:'GPS starts when TomaSafe is in the foreground.'}));
     return () => { active=false; stop(); appSub.remove(); };
   }, [enabled, retryKey]);
   return state;

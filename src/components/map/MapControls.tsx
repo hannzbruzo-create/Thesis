@@ -11,10 +11,11 @@ type Props = {
   onReset: () => void;
   onFitCampus: () => void;
   onToggleTilt: () => void;
+  hasLiveLocation?: boolean;
 };
 
 /** Compact, fixed-position control stack copied from the old home screen. */
-export default function MapControls({ zoom, tilted, onZoomIn, onZoomOut, onReset, onFitCampus, onToggleTilt }: Props) {
+export default function MapControls({ zoom, tilted, onZoomIn, onZoomOut, onReset, onFitCampus, onToggleTilt, hasLiveLocation=false }: Props) {
   return (
     <View style={[styles.mapControls, { bottom: 215 }]}>
       <Pressable style={styles.controlButton} onPress={onZoomIn} accessibilityRole="button" accessibilityLabel="Zoom in">
@@ -27,7 +28,7 @@ export default function MapControls({ zoom, tilted, onZoomIn, onZoomOut, onReset
         <MaterialCommunityIcons name="minus" size={21} color="#334155" />
       </Pressable>
       <View style={styles.controlDivider} />
-      <Pressable style={styles.controlButton} onPress={onReset} accessibilityRole="button" accessibilityLabel="Reset view">
+      <Pressable style={styles.controlButton} onPress={onReset} accessibilityRole="button" accessibilityLabel={hasLiveLocation ? "Center on my GPS location" : "Reset view"}>
         <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#2563EB" />
       </Pressable>
       <View style={styles.controlDivider} />

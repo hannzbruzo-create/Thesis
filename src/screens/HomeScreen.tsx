@@ -31,6 +31,8 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   const [startOnPath, setStartOnPath] = useState(false);
   const [plan, setPlan] = useState<PreviewPlan | null>(null);
   const [displayPlan, setDisplayPlan] = useState<PreviewPlan | null>(null);
+  const [animateRoute, setAnimateRoute] = useState(false);
+  const [routeWarning, setRouteWarning] = useState(false);
   const activeFocus = useRef<{ id: number; plan: PreviewPlan } | null>(null);
   const focusSequence = useRef(0);
   const [focusRequest, setFocusRequest] = useState<{ point: Point; id: number } | null>(null);
@@ -43,11 +45,15 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   const ignoreMapTap = useCallback((_point: Point) => {}, []);
   const lastCalculated = useRef<CalculatedAt | null>(null);
   const mostRecentFix = useRef(0);
+  const outsideConsecutive = useRef(0);
 
   const resetRoute = useCallback(() => {
     activeFocus.current = null;
     lastCalculated.current = null;
     mostRecentFix.current = 0;
+    outsideConsecutive.current = 0;
+    setAnimateRoute(false);
+    setRouteWarning(false);
     setStart(null);
     setStartPoint(null);
     setStartOnPath(false);
@@ -99,78 +105,108 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   }, [resetRoute]);
 
   const retryGps = useCallback(() => {
-    resetRoute();
-    setOutsideCampus(false);
+    // A retry must NEVER remove an already verified path.
+    setRouteWarning(Boolean(lastCalculated.current));
     setLiveMessage('Retrying a fresh GPS fix...');
     setGpsRetryKey(key => key + 1);
-  }, [resetRoute]);
+  }, []);
 
   const showPlan = useCallback((result: PreviewPlan) => {
     const id = ++focusSequence.current;
     activeFocus.current = { id, plan: result };
     setPlan(result);
     setDisplayPlan(null);
+    setAnimateRoute(true);
     setFocusRequest({ point: result.origin, id });
   }, []);
 
   const finishFocus = useCallback((id: number) => {
     if (activeFocus.current?.id === id) {
       setDisplayPlan(activeFocus.current.plan);
+      activeFocus.current = null;
     }
   }, []);
 
-  // Foreground GPS updates the marker. Recalculate only after meaningful
-  // movement; hysteresis retains a destination through small near-ties.
+  // Foreground tracking is independent of route availability. Keep the last
+  // VERIFIED route through ordinary GPS uncertainty, reflections near walls,
+  // missing fixes, background/foreground transitions and reroute failures.
+  // Never replace a valid route with an unverified one.
   useEffect(() => {
     if (!liveEnabled || !outsideConfirmed || stage !== 'navigation') return;
-    if (!gps.fix) {
-      setLiveMessage(gps.message);
-      if (gps.phase === 'background' || gps.phase === 'error' ||
-          gps.phase === 'unavailable' || gps.phase === 'permission-denied') {
-        resetRoute();
-        setOutsideCampus(false);
-      }
+
+    if (gps.phase !== 'tracking' || !gps.fix) {
+      setRouteWarning(Boolean(lastCalculated.current));
+      setLiveMessage(lastCalculated.current
+        ? 'GPS is updating. Keeping your last verified route.'
+        : gps.message);
       return;
     }
     const fix = gps.fix;
     if (fix.timestamp <= mostRecentFix.current) return;
     mostRecentFix.current = fix.timestamp;
     if (Date.now() - fix.timestamp > 15000) {
-      setLiveMessage('GPS is outdated. Waiting for a fresh location.');
-      setOutsideCampus(false);
-      resetRoute();
-      return;
-    }
-    const check = screenOutdoorFix(fix);
-    if (!check.usable || !check.point) {
-      setOutsideCampus(check.code === 'outside-campus');
-      setLiveMessage(check.reason);
-      resetRoute();
+      setRouteWarning(Boolean(lastCalculated.current));
+      setLiveMessage('Waiting for fresh GPS. Last verified route remains visible.');
       return;
     }
 
+    const check = screenOutdoorFix(fix);
+    if (!check.usable || !check.point) {
+      if (check.code === 'outside-campus') {
+        outsideConsecutive.current += 1;
+        // GPS drift can briefly put a real campus user outside the approximate
+        // SVG rectangle. Require several consecutive high-quality fixes.
+        if (outsideConsecutive.current >= 3) {
+          setOutsideCampus(true);
+          // The user is confidently outside the mapped region: routing must
+          // not be shown as valid or active there.
+          setDisplayPlan(null);
+          setPlan(null);
+          setStartPoint(null);
+          setStart(null);
+          setStartOnPath(false);
+          activeFocus.current = null;
+        }
+      } else {
+        outsideConsecutive.current = 0;
+        setOutsideCampus(false);
+      }
+      setRouteWarning(Boolean(lastCalculated.current));
+      setLiveMessage(check.reason);
+      // Keep the last VERIFIED marker and route; do not trust a point that
+      // falls into a roof polygon or has high reported uncertainty.
+      return;
+    }
+
+    outsideConsecutive.current = 0;
     setOutsideCampus(false);
+    setRouteWarning(false);
     const point = check.point;
     const previous = lastCalculated.current;
     const moved = previous ? distanceMeters(previous.fix, fix) : Infinity;
-    const elapsedSeconds = previous ? Math.max(1, (fix.timestamp - previous.fix.timestamp) / 1000) : Infinity;
+    const elapsedSeconds = previous
+      ? Math.max(1, (fix.timestamp - previous.fix.timestamp) / 1000)
+      : Infinity;
     if (previous && moved > Math.max(45, elapsedSeconds * 12)) {
-      setLiveMessage('GPS changed unexpectedly. Waiting for a stable position...');
+      setRouteWarning(true);
+      setLiveMessage('Unstable GPS position. Keeping your last verified route.');
       return;
     }
-    // This is the *actual* GPS point, not the selected graph node.
+    // Marker follows current reliable GPS, independently of route throttling.
     setStartPoint(point);
-    setLiveMessage(
-      `GPS accuracy ±${Math.round(fix.accuracy ?? 0)} m · ${previous?'Route updates as you walk':'Calculating the nearest evacuation route...'}`
-    );
+    setLiveMessage(previous
+      ? `GPS ±${Math.round(fix.accuracy ?? 0)} m · Route updates as you walk`
+      : 'Calculating nearest evacuation route...');
+
     const elapsed = previous ? Date.now() - previous.at : Infinity;
-    if (previous && (moved < MIN_REROUTE_MOVEMENT_M || elapsed < MIN_REROUTE_INTERVAL_MS)) return;
+    if (previous && !outsideCampus &&
+        (moved < MIN_REROUTE_MOVEMENT_M || elapsed < MIN_REROUTE_INTERVAL_MS ||
+         (animateRoute && Date.now() - previous.at < 3000))) return;
 
     const snapped = snapPreviewStart(point);
     if (!snapped.node) {
-      setLiveMessage(snapped.blocked ? 'Location overlaps a blocked building area. Routing paused.' :
-        'No mapped walkable path nearby. Routing paused.');
-      resetRoute();
+      setRouteWarning(Boolean(previous));
+      setLiveMessage('GPS is near a restricted area. Keeping the last verified route.');
       return;
     }
     const result = calculatePreview(snapped.node.id, point, {
@@ -178,21 +214,30 @@ export default function HomeScreen({ emergencyRequest }: Props) {
       switchMargin: previous ? Math.max(8, previous.plan.weightedDistance * 0.04) : 0,
     });
     if (!result.plan) {
-      setLiveMessage(`Route unavailable: ${result.message}`);
-      resetRoute();
+      setRouteWarning(Boolean(previous));
+      setLiveMessage('Cannot confirm a new safe route. Keeping the last verified route.');
       return;
     }
+    setRouteWarning(false);
     setStart(snapped.node);
     setStartOnPath(snapped.onPath);
     lastCalculated.current = {fix,plan:result.plan,at:Date.now()};
-    if (!previous) showPlan(result.plan);
-    else {
-      // Reuse camera and avoid replaying its focus animation on GPS updates.
-      activeFocus.current = null;
+    if (!previous || outsideCampus) {
+      showPlan(result.plan);
+    } else if (activeFocus.current) {
+      // A GPS update during the first camera glide must not interrupt the
+      // initial animated route: replace the pending plan and reveal at settle.
+      activeFocus.current.plan = result.plan;
+      setPlan(result.plan);
+    } else {
+      // Frequent reroutes are drawn immediately; replaying the entire path
+      // on every GPS update creates visual flashes/stutter on Android.
+      setAnimateRoute(false);
       setPlan(result.plan);
       setDisplayPlan(result.plan);
     }
-  }, [liveEnabled, outsideConfirmed, stage, gps.fix?.timestamp, gps.phase, gps.message, showPlan, resetRoute]);
+  }, [liveEnabled, outsideConfirmed, stage, gps.fix?.timestamp, gps.phase,
+    gps.message, showPlan, outsideCampus, animateRoute]);
 
   return (
     <View style={styles.root}>
@@ -207,6 +252,7 @@ export default function HomeScreen({ emergencyRequest }: Props) {
         showGraph={false}
         onMapTap={ignoreMapTap}
         liveGps={liveEnabled}
+        animateRoute={animateRoute}
       />
       <HeaderBar />
       {stage === 'navigation' && emergencyType && (
@@ -215,6 +261,7 @@ export default function HomeScreen({ emergencyRequest }: Props) {
           emergencyMode={emergencyType}
           liveStatus={liveMessage}
           outsideCampus={outsideCampus}
+          routeWarning={routeWarning}
           onChangeEmergency={changeEmergency}
           onRetryGps={retryGps}
         />
