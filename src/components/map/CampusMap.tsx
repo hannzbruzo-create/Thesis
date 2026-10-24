@@ -72,7 +72,12 @@ export default function CampusMap({start,startPoint,startOnPath=false,focusReque
               </Animated.View>
               <StaticMapFade />
               <RoutePreviewOverlay mapSize={MAP_SIZE} start={start} startPoint={startPoint} startOnPath={startOnPath} plan={plan} showGraph={showGraph} liveGps={liveGps} animateRoute={animateRoute} />
-              <BuildingLabels mapSize={MAP_SIZE} zoomLevel={camera.zoomDisplay} />
+              <BuildingLabels
+  mapSize={MAP_SIZE}
+  cameraScale={camera.markerCamera.scale}
+  zoomLevel={camera.zoomDisplay}
+  hidden={Boolean(plan)}
+/>
               {/* Keep the destination on the SAME native map plane as the route.
                   Do not project it into screen space separately: perspective +
                   scale transform order differs between Android native views and

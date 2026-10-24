@@ -1,45 +1,62 @@
+
 import { StyleSheet } from 'react-native';
 
-export default StyleSheet.create({
+const styles = StyleSheet.create({
   layer: {
     position: 'absolute',
     top: 0,
     left: 0,
     overflow: 'visible',
   },
+
   position: {
     position: 'absolute',
-    // Center the round icon on the map coordinate.
-    transform: [{ translateX: -11 }, { translateY: -11 }],
     zIndex: 30,
+    transform: [
+      { translateX: -1 },
+      { translateY: -10 },
+    ],
   },
+
   labelWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    elevation: 0,
   },
+
+  // Original green circular building icon.
   iconContainer: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#8B3A3A',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#597663',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    marginRight: 3,
   },
+
+  // White labels with subtle dark shadows.
   text: {
-    marginLeft: 5,
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
-    maxWidth: 85,
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: { width: 0, height: 1 },
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.05,
+    includeFontPadding: false,
+
+    textShadowColor: 'rgba(30, 40, 35, 0.9)',
+    textShadowOffset: {
+      width: 0,
+      height: 1,
+    },
     textShadowRadius: 2,
   },
+
+  detailText: {
+    fontSize: 10.5,
+  },
 });
+
+export default styles;
