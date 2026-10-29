@@ -1,7 +1,8 @@
 import combinedGraph from '../data/fullWalkableGraph.json';
 export type Point = { x: number; y: number };
 export type GraphNode = Point & { id: string; kind: 'road' | 'open' | 'covered' };
-export type GraphEdge = { from: string; to: string; weight: number };
+/** length in map units; wall = distance to the nearest building wall when closer than WALL_BUFFER. */
+export type GraphEdge = { from: string; to: string; length: number; wall?: number };
 export const WALKABLE_NODES = combinedGraph.nodes as GraphNode[];
 export const WALKABLE_EDGES = combinedGraph.edges as GraphEdge[];
 export const WALKABLE_NODES_BY_ID: Record<string, GraphNode> = Object.fromEntries(

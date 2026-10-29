@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TomaSafe Map Editor</title>
+<style>
+  :root { --panel: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 13px system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: #1e293b; }
+  #app { display: grid; grid-template-columns: 1fr 310px; height: 100%; }
+  #stage { position: relative; overflow: hidden; cursor: grab; }
+  #stage.panning { cursor: grabbing; }
+  #stage.drawing { cursor: crosshair; }
+  svg { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; }
+  #side { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: auto; }
+  #side header { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  #side h1 { margin: 0; font-size: 15px; }
+  #side .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .sec { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .sec h2 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  label.row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: #f8fafc; cursor: pointer; font: inherit; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.active { background: #fef9c3; border-color: #facc15; }
+  .btn.danger { color: #b91c1c; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .field { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 6px; margin: 5px 0; }
+  .field input, .field select, select.inline { font: inherit; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; width: 100%; }
+  #info .name { font-weight: 700; font-size: 14px; }
+  #info code, .hint code { background: #f1f5f9; padding: 1px 5px; border-radius: 5px; }
+  #info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0 0; }
+  #info dt { color: var(--muted); }
+  #info dd { margin: 0; }
+  #changes { max-height: 150px; overflow: auto; font-size: 12px; color: var(--muted); padding-left: 18px; margin: 0; }
+  #changes li { margin: 2px 0; }
+  .hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  #drawbar { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 8px 12px; border-radius: 10px; display: none; gap: 8px; align-items: center; font-size: 12px; }
+  #drawbar.show { display: flex; }
+  #drawbar .btn { padding: 4px 8px; }
+  #toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 8px 12px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: .92; }
+  .b { fill: rgba(37,99,235,.18); stroke: #38bdf8; stroke-width: .8; }
+  .b.edited { stroke: #4ade80; }
+  .b.added { fill: rgba(74,222,128,.25); stroke: #4ade80; }
+  .b.sel { fill: rgba(250,204,21,.28); stroke: #facc15; stroke-width: 1.4; }
+  .a { fill: rgba(249,115,22,.14); stroke: #fb923c; stroke-width: .6; }
+  .a.added { stroke: #4ade80; }
+  .a.sel { fill: rgba(250,204,21,.25); stroke: #facc15; stroke-width: 1.2; }
+  .r { fill: none; stroke: rgba(236,72,153,.55); stroke-linecap: round; stroke-linejoin: round; }
+  .r.walk { stroke: rgba(248,250,252,.7); }
+  .r.sel { stroke: rgba(250,204,21,.85); }
+  .hit { fill: none; stroke: transparent; stroke-linecap: round; }
+  .lbl { fill: #fff; font: 600 5px system-ui, sans-serif; paint-order: stroke; stroke: rgba(15,23,42,.85); stroke-width: 1.2px; pointer-events: none; text-anchor: middle; }
+  .handle { fill: #fff; stroke: #2563eb; stroke-width: .8; cursor: move; }
+  .handle:hover { fill: #facc15; }
+  .draft { fill: rgba(74,222,128,.2); stroke: #4ade80; stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+  .draft.line { fill: none; }
+  .draftpt { fill: #4ade80; stroke: #fff; stroke-width: .6; pointer-events: none; }
+  @media (max-width: 760px) { #app { grid-template-columns: 1fr; grid-template-rows: 1fr 45%; } #side { border-left: 0; border-top: 1px solid var(--line); } }
+</style></head>
+<body>
+<div id="app">
+  <div id="stage">
+    <svg id="svg"><g id="view"><image id="photo" href="campus-top.webp" x="0" y="0" width="970" height="912" preserveAspectRatio="none"/><g id="areas"></g><g id="roads"></g><g id="bldgs"></g><g id="labels"></g><g id="draft"></g><g id="handles"></g></g></svg>
+    <div id="drawbar"><span id="drawmsg">Click to place corners</span>
+      <button class="btn" id="drawUndo">Undo point</button><button class="btn primary" id="drawDone">Finish</button><button class="btn" id="drawCancel">Cancel</button></div>
+    <div id="toast"></div>
+  </div>
+  <aside id="side">
+    <header><h1>TomaSafe Map Editor</h1><div class="sub">Click a shape to see and edit it. Add new shapes below. Then export.</div></header>
+    <div class="sec">
+      <h2>Show</h2>
+      <label class="row"><input type="checkbox" id="showB" checked> Buildings</label>
+      <label class="row"><input type="checkbox" id="showR" checked> Roads &amp; walkways</label>
+      <label class="row"><input type="checkbox" id="showA" checked> Ground areas</label>
+      <label class="row"><input type="checkbox" id="showL" checked> Labels (IDs)</label>
+      <label class="row">Photo <input type="range" id="photoOp" min="0" max="1" step="0.05" value="1" style="flex:1"></label>
+    </div>
+    <div class="sec">
+      <h2>Add</h2>
+      <div class="grid2">
+        <button class="btn" id="addBuilding">+ Building</button>
+        <button class="btn" id="addArea">+ Ground area</button>
+        <button class="btn" id="addRoad">+ Road</button>
+        <button class="btn" id="addWalk">+ Walkway</button>
+      </div>
+      <label class="row" style="margin-top:6px">Area type
+        <select class="inline" id="areaKind"><option>grass</option><option>field</option><option>dirt</option><option>court</option><option>plaza</option><option>parking</option><option>water</option></select></label>
+      <div class="hint">Click on the photo to place each corner (or road point). Double-click or press <code>Enter</code> to finish, <code>Backspace</code> to remove the last point, <code>Esc</code> to cancel.</div>
+    </div>
+    <div class="sec" id="info"><div class="hint">Nothing selected. Click a building, road or area.</div></div>
+    <div class="sec">
+      <h2>Edit</h2>
+      <div class="hint">Drag corners to reshape · drag inside a shape to move it · double-click an edge to add a corner · right-click a corner to remove it · scroll to zoom · drag empty space to pan · <code>Ctrl+Z</code> undo.</div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" id="undo" disabled>Undo</button>
+        <button class="btn danger" id="revert" disabled>Revert selected</button>
+        <button class="btn danger" id="del" disabled>Delete selected</button>
+      </div>
+    </div>
+    <div class="sec">
+      <h2>Changes</h2>
+      <ul id="changes"><li>No changes yet.</li></ul>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn primary" id="export">Export edits</button>
+        <button class="btn" id="copy">Copy</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Saves <code>map-edits.json</code>. Put it in <code>Thesis/tools/</code> and run<br><code>node tools/build-campus-from-photo.cjs --force --editor</code></div>
+    </div>
+  </aside>
+</div>
+<script>
+// Data is injected by tools/build-campus-from-photo.cjs --editor. Coordinates are photo pixels.
+const DATA = /*__DATA__*/null;
+const PREVIOUS_EDITS = /*__EDITS__*/null;
+
+const NS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+const svg = $('svg'), view = $('view');
+const ROOFS = ['gable', 'hip', 'flat', 'pyramid'];
+const KINDS = ['grass', 'field', 'dirt', 'court', 'plaza', 'parking', 'water'];
+const GROUP = { building: 'buildings', area: 'areas', road: 'roads', walkway: 'walkways' };
+
+// key -> shape. Each shape keeps its original geometry/properties to detect edits.
+const shapes = {};
+const propsOf = s => s.kind === 'building' ? { name: s.name, roof: s.roof, floors: s.floors }
+  : s.kind === 'area' ? { areaKind: s.areaKind } : { width: s.width };
+function addShape(key, s) { s.orig = JSON.stringify(s.pts); s.origProps = JSON.stringify(propsOf(s)); shapes[key] = s; return s; }
+for (const b of DATA.buildings) addShape('b:' + b.id, { kind: 'building', id: b.id, name: b.name, group: b.group, roof: b.roof, floors: b.floors, pts: b.poly.map(p => [...p]), closed: true });
+for (const a of DATA.areas) addShape('a:' + a.id, { kind: 'area', id: a.id, areaKind: a.kind, pts: a.poly.map(p => [...p]), closed: true });
+for (const r of DATA.roads) addShape('r:' + r.id, { kind: r.covered === undefined ? 'road' : 'walkway', id: r.id, width: r.width, pts: r.pts.map(p => [...p]), closed: false });
+
+const prefixFor = kind => kind === 'building' ? 'b:' : kind === 'area' ? 'a:' : 'r:';
+function newShape(kind, pts, extra = {}) {
+  const base = kind === 'area' ? 'new-area' : kind === 'road' ? 'new-road' : kind === 'walkway' ? 'new-walkway' : 'new-building';
+  let n = 1; while (shapes[prefixFor(kind) + `${base}-${n}`]) n++;
+  const id = `${base}-${n}`;
+  const s = { kind, id, pts, closed: kind === 'building' || kind === 'area', added: true, ...extra };
+  if (kind === 'building') Object.assign(s, { name: extra.name ?? 'New building', roof: extra.roof ?? 'hip', floors: extra.floors ?? 2 });
+  if (kind === 'area') s.areaKind = extra.areaKind ?? 'grass';
+  if (kind === 'road') s.width = extra.width ?? 10;
+  if (kind === 'walkway') s.width = extra.width ?? 6;
+  shapes[prefixFor(kind) + id] = s;
+  return s;
+}
+
+// Re-apply edits exported earlier, so the editor opens where you left off.
+if (PREVIOUS_EDITS) {
+  for (const [group, kind] of [['buildings', 'building'], ['areas', 'area'], ['roads', 'road'], ['walkways', 'walkway']]) {
+    for (const [id, e] of Object.entries(PREVIOUS_EDITS[group] || {})) {
+      let s = shapes[prefixFor(kind) + id];
+      if (e.add) {
+        s = { kind, id, closed: kind === 'building' || kind === 'area', added: true, pts: (e.poly || e.pts).map(p => [...p]) };
+        if (kind === 'building') Object.assign(s, { name: e.name ?? 'New building', roof: e.roof ?? 'hip', floors: e.floors ?? 2 });
+        if (kind === 'area') s.areaKind = e.kind ?? 'grass';
+        if (kind === 'road' || kind === 'walkway') s.width = e.width ?? (kind === 'road' ? 10 : 6);
+        shapes[prefixFor(kind) + id] = s;
+        continue;
+      }
+      if (!s) continue;
+      if (e.delete) s.deleted = true;
+      if (e.poly) s.pts = e.poly.map(p => [...p]);
+      if (e.pts) s.pts = e.pts.map(p => [...p]);
+      if (e.name !== undefined) s.name = e.name;
+      if (e.roof !== undefined) s.roof = e.roof;
+      if (e.floors !== undefined) s.floors = e.floors;
+      if (e.kind !== undefined) s.areaKind = e.kind;
+      if (e.width !== undefined) s.width = e.width;
+    }
+  }
+}
+
+let selected = null;
+const history = [];
+const keyOf = s => Object.keys(shapes).find(k => shapes[k] === s);
+const snapshot = s => ({ key: keyOf(s), state: JSON.stringify({ pts: s.pts, deleted: !!s.deleted, props: propsOf(s) }) });
+const restore = h => {
+  const s = shapes[h.key]; if (!s) return;
+  const st = JSON.parse(h.state); s.pts = st.pts; s.deleted = st.deleted; Object.assign(s, st.props);
+};
+const geomEdited = s => JSON.stringify(s.pts) !== s.orig;
+const propsEdited = s => JSON.stringify(propsOf(s)) !== s.origProps;
+const isEdited = s => s.added || s.deleted || geomEdited(s) || propsEdited(s);
+
+// ---- pan & zoom ----
+let vx = 0, vy = 0, vs = 1;
+function fit() {
+  const r = svg.getBoundingClientRect();
+  vs = Math.min(r.width / 970, r.height / 912); vx = (r.width - 970 * vs) / 2; vy = (r.height - 912 * vs) / 2; applyView();
+}
+function applyView() { view.setAttribute('transform', `translate(${vx},${vy}) scale(${vs})`); drawHandles(); drawDraft(); }
+const toPhoto = (cx, cy) => { const r = svg.getBoundingClientRect(); return [(cx - r.left - vx) / vs, (cy - r.top - vy) / vs]; };
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const [px, py] = toPhoto(e.clientX, e.clientY);
+  vs = Math.min(40, Math.max(0.3, vs * Math.exp(-e.deltaY * 0.0015)));
+  const r = svg.getBoundingClientRect();
+  vx = e.clientX - r.left - px * vs; vy = e.clientY - r.top - py * vs; applyView();
+}, { passive: false });
+
+// ---- drawing the map ----
+const el = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) if (attrs[k] !== undefined) n.setAttribute(k, attrs[k]); parent?.appendChild(n); return n; };
+const ptsAttr = pts => pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ');
+const centre = pts => pts.reduce((c, p) => [c[0] + p[0] / pts.length, c[1] + p[1] / pts.length], [0, 0]);
+function draw() {
+  for (const g of ['areas', 'roads', 'bldgs', 'labels']) $(g).innerHTML = '';
+  for (const [key, s] of Object.entries(shapes)) {
+    if (s.deleted) continue;
+    const cls = (s === selected ? ' sel' : '') + (s.added ? ' added' : isEdited(s) ? ' edited' : '');
+    if (s.kind === 'building' && $('showB').checked) {
+      el('polygon', { class: 'b' + cls, points: ptsAttr(s.pts), 'data-key': key }, $('bldgs'));
+    } else if (s.kind === 'area' && $('showA').checked) {
+      el('polygon', { class: 'a' + cls, points: ptsAttr(s.pts), 'data-key': key }, $('areas'));
+    } else if ((s.kind === 'road' || s.kind === 'walkway') && $('showR').checked) {
+      el('polyline', { class: 'r' + (s.kind === 'walkway' ? ' walk' : '') + cls, points: ptsAttr(s.pts), 'stroke-width': s.width }, $('roads'));
+      el('polyline', { class: 'hit', points: ptsAttr(s.pts), 'stroke-width': Math.max(s.width, 6), 'data-key': key }, $('roads'));
+    }
+    if ($('showL').checked && ((s.kind === 'building' && $('showB').checked) || (s.kind === 'area' && $('showA').checked))) {
+      const [cx, cy] = centre(s.pts);
+      el('text', { class: 'lbl', x: cx, y: cy + 1.5 }, $('labels')).textContent = s.id;
+    }
+  }
+  drawHandles(); renderInfo(); renderChanges();
+}
+function drawHandles() {
+  const g = $('handles'); g.innerHTML = '';
+  if (!selected || selected.deleted || mode) return;
+  const r = 3.2 / Math.max(vs, 0.6);
+  selected.pts.forEach((p, i) => el('circle', { class: 'handle', cx: p[0], cy: p[1], r, 'data-i': i }, g));
+}
+
+// ---- side panel ----
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function renderInfo() {
+  const box = $('info');
+  if (!selected) { box.innerHTML = '<div class="hint">Nothing selected. Click a building, road or area.</div>'; }
+  else {
+    const s = selected;
+    let fields = '';
+    if (s.kind === 'building') {
+      fields = `<div class="field"><span>Name</span><input id="pName" value="${esc(s.name)}"></div>
+        <div class="field"><span>Roof</span><select id="pRoof">${ROOFS.map(r => `<option${r === s.roof ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
+        <div class="field"><span>Floors</span><input id="pFloors" type="number" min="1" max="20" value="${s.floors}"></div>`;
+    } else if (s.kind === 'area') {
+      fields = `<div class="field"><span>Type</span><select id="pKind">${KINDS.map(k => `<option${k === s.areaKind ? ' selected' : ''}>${k}</option>`).join('')}</select></div>`;
+    } else {
+      fields = `<div class="field"><span>Width</span><input id="pWidth" type="number" min="2" max="30" step="0.5" value="${s.width}"></div>`;
+    }
+    const meta = [['ID', `<code>${esc(s.id)}</code>`], ['Type', s.kind + (s.added ? ' (new)' : '')]];
+    if (s.group) meta.push(['Group', `<code>${esc(s.group)}</code>`]);
+    meta.push(['Points', s.pts.length]);
+    box.innerHTML = `<div class="name">${esc(s.kind === 'building' ? s.name : s.id)}</div>
+      <dl>${meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>${fields}
+      <div class="hint" style="margin-top:6px">Or tell Claude: “change <code>${esc(s.id)}</code> …”</div>`;
+    const bind = (id, apply) => { const n = $(id); if (!n) return; n.onfocus = () => history.push(snapshot(s)); n.onchange = () => { apply(n.value); draw(); }; };
+    bind('pName', v => { s.name = v.trim() || s.name; });
+    bind('pRoof', v => { s.roof = v; });
+    bind('pFloors', v => { s.floors = Math.max(1, Math.min(20, Math.round(+v) || s.floors)); });
+    bind('pKind', v => { s.areaKind = v; });
+    bind('pWidth', v => { s.width = Math.max(2, Math.min(30, +v || s.width)); });
+  }
+  $('revert').disabled = !selected || !isEdited(selected) || selected.added;
+  $('del').disabled = !selected || selected.deleted;
+  $('undo').disabled = !history.length;
+}
+function renderChanges() {
+  const list = Object.values(shapes).filter(isEdited);
+  $('changes').innerHTML = list.length ? list.map(s => {
+    const what = s.added ? (s.deleted ? null : 'Added') : s.deleted ? 'Deleted' : [geomEdited(s) && 'reshaped', propsEdited(s) && 'properties'].filter(Boolean).join(' + ');
+    return what ? `<li>${what[0].toUpperCase() + what.slice(1)} <code>${esc(s.id)}</code></li>` : '';
+  }).join('') : '<li>No changes yet.</li>';
+}
+const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 1800); };
+
+// ---- add mode: click to place points ----
+let mode = null, draft = [];
+const MODE_LABEL = { building: 'building corners', area: 'area corners', road: 'road points', walkway: 'walkway points' };
+function startDraw(kind) {
+  mode = kind; draft = []; selected = null;
+  $('stage').classList.add('drawing'); $('drawbar').classList.add('show');
+  for (const [k, id] of [['building', 'addBuilding'], ['area', 'addArea'], ['road', 'addRoad'], ['walkway', 'addWalk']]) $(id).classList.toggle('active', k === kind);
+  updateDrawMsg(); draw();
+}
+function stopDraw() {
+  mode = null; draft = [];
+  $('stage').classList.remove('drawing'); $('drawbar').classList.remove('show');
+  for (const id of ['addBuilding', 'addArea', 'addRoad', 'addWalk']) $(id).classList.remove('active');
+  drawDraft(); draw();
+}
+function updateDrawMsg() {
+  const need = mode === 'building' || mode === 'area' ? 3 : 2;
+  $('drawmsg').textContent = `Click to place ${MODE_LABEL[mode]} · ${draft.length} placed${draft.length >= need ? ' · Enter or double-click to finish' : ` · need ${need}`}`;
+  $('drawDone').disabled = draft.length < need;
+}
+function finishDraw() {
+  const need = mode === 'building' || mode === 'area' ? 3 : 2;
+  if (draft.length < need) { toast(`Place at least ${need} points`); return; }
+  const s = newShape(mode, draft.map(p => [...p]), mode === 'area' ? { areaKind: $('areaKind').value } : {});
+  history.push({ key: keyOf(s), state: JSON.stringify({ pts: s.pts, deleted: true, props: propsOf(s) }) }); // undo removes it
+  stopDraw(); selected = s; draw();
+  toast(`Added ${s.id} — set its details on the right`);
+}
+function drawDraft() {
+  const g = $('draft'); g.innerHTML = '';
+  if (!mode || !draft.length) return;
+  const closed = mode === 'building' || mode === 'area';
+  el(closed && draft.length > 2 ? 'polygon' : 'polyline', { class: closed && draft.length > 2 ? 'draft' : 'draft line', points: ptsAttr(draft) }, g);
+  const r = 2.6 / Math.max(vs, 0.6);
+  for (const p of draft) el('circle', { class: 'draftpt', cx: p[0], cy: p[1], r }, g);
+}
+$('addBuilding').onclick = () => startDraw('building');
+$('addArea').onclick = () => startDraw('area');
+$('addRoad').onclick = () => startDraw('road');
+$('addWalk').onclick = () => startDraw('walkway');
+$('drawUndo').onclick = () => { draft.pop(); updateDrawMsg(); drawDraft(); };
+$('drawDone').onclick = finishDraw;
+$('drawCancel').onclick = stopDraw;
+
+// ---- interaction ----
+let drag = null, downAt = null;
+svg.addEventListener('pointerdown', e => {
+  const t = e.target;
+  const [px, py] = toPhoto(e.clientX, e.clientY);
+  downAt = [e.clientX, e.clientY];
+  if (mode) { drag = { mode: 'pan', last: [e.clientX, e.clientY], click: true }; svg.setPointerCapture(e.pointerId); return; }
+  if (t.classList.contains('handle')) {
+    if (e.button === 2) return;
+    history.push(snapshot(selected));
+    drag = { mode: 'corner', i: +t.dataset.i };
+  } else if (t.dataset.key) {
+    const s = shapes[t.dataset.key];
+    if (selected !== s) { selected = s; draw(); }
+    history.push(snapshot(s));
+    drag = { mode: 'move', last: [px, py], moved: false };
+  } else {
+    if (selected) { selected = null; draw(); }
+    drag = { mode: 'pan', last: [e.clientX, e.clientY] };
+    $('stage').classList.add('panning');
+  }
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.mode === 'pan') {
+    if (drag.click && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 4) return;
+    drag.click = false;
+    vx += e.clientX - drag.last[0]; vy += e.clientY - drag.last[1]; drag.last = [e.clientX, e.clientY]; applyView(); return;
+  }
+  const [px, py] = toPhoto(e.clientX, e.clientY);
+  if (drag.mode === 'corner') { selected.pts[drag.i] = [px, py]; }
+  else if (drag.mode === 'move') {
+    const dx = px - drag.last[0], dy = py - drag.last[1];
+    if (Math.abs(dx) + Math.abs(dy) > 0) drag.moved = true;
+    selected.pts = selected.pts.map(([x, y]) => [x + dx, y + dy]); drag.last = [px, py];
+  }
+  draw();
+});
+svg.addEventListener('pointerup', e => {
+  if (mode && drag?.click) { draft.push(toPhoto(e.clientX, e.clientY)); updateDrawMsg(); drawDraft(); }
+  if (drag?.mode === 'move' && !drag.moved) history.pop(); // a click, not a move
+  if (drag?.mode === 'pan') $('stage').classList.remove('panning');
+  drag = null; renderInfo();
+});
+svg.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (mode || !e.target.classList.contains('handle') || !selected) return;
+  const min = selected.closed ? 3 : 2;
+  if (selected.pts.length <= min) { toast('Needs at least ' + min + ' points'); return; }
+  history.push(snapshot(selected));
+  selected.pts.splice(+e.target.dataset.i, 1); draw();
+});
+svg.addEventListener('dblclick', e => {
+  if (mode) { draft.pop(); finishDraw(); return; } // the second click of the double-click added a duplicate point
+  if (!selected) return;
+  const [px, py] = toPhoto(e.clientX, e.clientY);
+  let best = { d: Infinity, i: -1 };
+  const n = selected.pts.length, last = selected.closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const a = selected.pts[i], b = selected.pts[(i + 1) % n];
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / L));
+    const d = Math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy));
+    if (d < best.d) best = { d, i };
+  }
+  if (best.d > 12 / vs + 4) return;
+  history.push(snapshot(selected));
+  selected.pts.splice(best.i + 1, 0, [px, py]); draw();
+});
+$('undo').onclick = () => { const h = history.pop(); if (h) { restore(h); draw(); } };
+$('revert').onclick = () => {
+  if (!selected || selected.added) return;
+  history.push(snapshot(selected));
+  selected.pts = JSON.parse(selected.orig); selected.deleted = false; Object.assign(selected, JSON.parse(selected.origProps)); draw();
+};
+$('del').onclick = () => { if (!selected) return; history.push(snapshot(selected)); selected.deleted = true; selected = null; draw(); };
+for (const id of ['showB', 'showR', 'showA', 'showL']) $(id).onchange = draw;
+$('photoOp').oninput = e => $('photo').setAttribute('opacity', e.target.value);
+document.addEventListener('keydown', e => {
+  const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if (mode) {
+    if (e.key === 'Enter') finishDraw();
+    else if (e.key === 'Escape') stopDraw();
+    else if (e.key === 'Backspace' && !typing) { e.preventDefault(); draft.pop(); updateDrawMsg(); drawDraft(); }
+    return;
+  }
+  if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); $('undo').click(); }
+  if (e.key === 'Escape') { selected = null; draw(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); $('del').click(); }
+});
+
+// ---- export ----
+function editsJSON() {
+  const out = { note: 'TomaSafe map edits in photo pixels. Read by tools/build-campus-from-photo.cjs.', buildings: {}, areas: {}, roads: {}, walkways: {} };
+  const round = pts => pts.map(p => p.map(v => Math.round(v * 10) / 10));
+  for (const s of Object.values(shapes)) {
+    if (!isEdited(s) || (s.added && s.deleted)) continue;
+    const e = {};
+    if (s.deleted) e.delete = true;
+    else {
+      if (s.added) e.add = true;
+      if (s.added || geomEdited(s)) e[s.closed ? 'poly' : 'pts'] = round(s.pts);
+      if (s.added || propsEdited(s)) {
+        if (s.kind === 'building') Object.assign(e, { name: s.name, roof: s.roof, floors: s.floors });
+        else if (s.kind === 'area') e.kind = s.areaKind;
+        else e.width = s.width;
+      }
+    }
+    out[GROUP[s.kind]][s.id] = e;
+  }
+  return JSON.stringify(out, null, 1);
+}
+$('export').onclick = () => {
+  const blob = new Blob([editsJSON()], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'map-edits.json'; a.click();
+  toast('Saved map-edits.json');
+};
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(editsJSON()); toast('Copied to clipboard'); } catch { toast('Copy failed — use Export'); }
+};
+window.addEventListener('resize', fit);
+fit(); draw();
+</script>
+</body></html>

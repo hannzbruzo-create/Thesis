@@ -1,0 +1,11 @@
+{
+ "source": "pius-ground.pdf",
+ "rotation": 0,
+ "rooms": [
+  {
+   "name": "Hall",
+   "x": 227.5,
+   "y": 748.4
+  }
+ ]
+}

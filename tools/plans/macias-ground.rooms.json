@@ -1,0 +1,71 @@
+{
+ "source": "macias-ground.pdf",
+ "rotation": 90,
+ "rooms": [
+  {
+   "name": "Rentable 1",
+   "x": 847.5,
+   "y": 462.3
+  },
+  {
+   "name": "Rentable 2",
+   "x": 847.6,
+   "y": 631.1
+  },
+  {
+   "name": "Rentable 3",
+   "x": 847.6,
+   "y": 798
+  },
+  {
+   "name": "Rentable 4",
+   "x": 847.6,
+   "y": 966.1
+  },
+  {
+   "name": "Storage",
+   "x": 848.1,
+   "y": 1144.2
+  },
+  {
+   "name": "PWD",
+   "x": 930.9,
+   "y": 1180.7
+  },
+  {
+   "name": "Men",
+   "x": 866.1,
+   "y": 1262.7
+  },
+  {
+   "name": "Wash Area",
+   "x": 1002.3,
+   "y": 1303.4
+  },
+  {
+   "name": "Women",
+   "x": 866.1,
+   "y": 1355
+  },
+  {
+   "name": "Music Room",
+   "x": 662.7,
+   "y": 1622.3
+  },
+  {
+   "name": "Lanai",
+   "x": 838.1,
+   "y": 1789.8
+  },
+  {
+   "name": "Storage",
+   "x": 973.8,
+   "y": 1810.5
+  },
+  {
+   "name": "Fire Pump Room",
+   "x": 656.6,
+   "y": 1934.6
+  }
+ ]
+}

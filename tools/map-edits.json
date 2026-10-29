@@ -1,0 +1,1214 @@
+{
+ "note": "Cleaned version of the editor export: squared corners, symmetric Dominic, connectors touching the buildings they join. Photo pixels. Floors 3 for St. Thomas, St. Dominic, St. Martin (campus directory board) and St. Albert (floor plan). Floors from the UST plan set: Pius, chapel and the Raymond convents are single-storey.",
+ "buildings": {
+  "elementary-north": {
+   "delete": true
+  },
+  "martin-south": {
+   "delete": true
+  },
+  "martin-pavilion": {
+   "poly": [
+    [
+     760,
+     70
+    ],
+    [
+     780,
+     70
+    ],
+    [
+     780,
+     108
+    ],
+    [
+     760,
+     108
+    ]
+   ],
+   "roof": "flat",
+   "floors": 1,
+   "roofColor": "#D4917A"
+  },
+  "elementary-south": {
+   "delete": true
+  },
+  "dominic": {
+   "poly": [
+    [
+     643,
+     258
+    ],
+    [
+     749,
+     258
+    ],
+    [
+     749,
+     334
+    ],
+    [
+     745,
+     334
+    ],
+    [
+     745,
+     373
+    ],
+    [
+     749,
+     373
+    ],
+    [
+     749,
+     449
+    ],
+    [
+     643,
+     449
+    ],
+    [
+     643,
+     402
+    ],
+    [
+     692,
+     402
+    ],
+    [
+     692,
+     305
+    ],
+    [
+     643,
+     305
+    ]
+   ],
+   "name": "ST. Dominic BLDG",
+   "roof": "flat",
+   "floors": 1,
+   "roofColor": "#D4917A",
+   "roofParts": [
+    {
+     "poly": [
+      [
+       643,
+       258
+      ],
+      [
+       699,
+       258
+      ],
+      [
+       699,
+       305
+      ],
+      [
+       643,
+       305
+      ]
+     ],
+     "style": "hip"
+    },
+    {
+     "poly": [
+      [
+       643,
+       402
+      ],
+      [
+       699,
+       402
+      ],
+      [
+       699,
+       449
+      ],
+      [
+       643,
+       449
+      ]
+     ],
+     "style": "hip"
+    },
+    {
+     "poly": [
+      [
+       699,
+       258
+      ],
+      [
+       749,
+       258
+      ],
+      [
+       749,
+       278
+      ],
+      [
+       699,
+       278
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       699,
+       429
+      ],
+      [
+       749,
+       429
+      ],
+      [
+       749,
+       449
+      ],
+      [
+       699,
+       449
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       731,
+       278
+      ],
+      [
+       749,
+       278
+      ],
+      [
+       749,
+       334
+      ],
+      [
+       731,
+       334
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       731,
+       373
+      ],
+      [
+       749,
+       373
+      ],
+      [
+       749,
+       429
+      ],
+      [
+       731,
+       429
+      ]
+     ],
+     "style": "gable"
+    }
+   ]
+  },
+  "dominic-nw": {
+   "delete": true
+  },
+  "dominic-sw": {
+   "delete": true
+  },
+  "dominic-walk": {
+   "poly": [
+    [
+     716,
+     449
+    ],
+    [
+     733,
+     449
+    ],
+    [
+     733,
+     516
+    ],
+    [
+     716,
+     516
+    ]
+   ],
+   "canopy": true,
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3
+  },
+  "walk-west": {
+   "delete": true
+  },
+  "walk-pius-aquinas": {
+   "add": true,
+   "poly": [
+    [
+     560,
+     371
+    ],
+    [
+     610,
+     371
+    ],
+    [
+     610,
+     516
+    ],
+    [
+     602,
+     516
+    ],
+    [
+     602,
+     379
+    ],
+    [
+     560,
+     379
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "walk-gym-dome": {
+   "add": true,
+   "poly": [
+    [
+     388,
+     684
+    ],
+    [
+     472,
+     684
+    ],
+    [
+     472,
+     736
+    ],
+    [
+     452,
+     736
+    ],
+    [
+     452,
+     704
+    ],
+    [
+     388,
+     704
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "walk-martin-pavilion": {
+   "add": true,
+   "poly": [
+    [
+     766,
+     108
+    ],
+    [
+     774,
+     108
+    ],
+    [
+     774,
+     126
+    ],
+    [
+     766,
+     126
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "dome-annex-east": {
+   "add": true,
+   "poly": [
+    [
+     538,
+     780
+    ],
+    [
+     562,
+     780
+    ],
+    [
+     562,
+     835
+    ],
+    [
+     538,
+     835
+    ]
+   ],
+   "name": "AQ Dome annex",
+   "group": "dome",
+   "roof": "hip",
+   "floors": 2
+  },
+  "walk-dome-macias": {
+   "add": true,
+   "poly": [
+    [
+     562,
+     773
+    ],
+    [
+     587,
+     773
+    ],
+    [
+     587,
+     783
+    ],
+    [
+     562,
+     783
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "walk-ssc": {
+   "add": true,
+   "poly": [
+    [
+     692,
+     639
+    ],
+    [
+     697,
+     639
+    ],
+    [
+     697,
+     660
+    ],
+    [
+     692,
+     660
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "walk-sanlorenzo-elementary": {
+   "add": true,
+   "poly": [
+    [
+     386,
+     190
+    ],
+    [
+     398,
+     190
+    ],
+    [
+     398,
+     198
+    ],
+    [
+     418,
+     198
+    ],
+    [
+     418,
+     210
+    ],
+    [
+     386,
+     210
+    ]
+   ],
+   "name": "Covered walkway",
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "canopy": true
+  },
+  "aquinas-north": {
+   "delete": true
+  },
+  "aquinas-offices": {
+   "delete": true
+  },
+  "aquinas-lobby": {
+   "delete": true
+  },
+  "aquinas-cashier": {
+   "delete": true
+  },
+  "aquinas-stairs": {
+   "delete": true
+  },
+  "aquinas": {
+   "floors": 1,
+   "poly": [
+    [
+     532.4,
+     514.3
+    ],
+    [
+     827.1,
+     514.3
+    ],
+    [
+     827.1,
+     692.4
+    ],
+    [
+     425.5,
+     692.4
+    ],
+    [
+     425.5,
+     659.2
+    ],
+    [
+     784.3,
+     659.2
+    ],
+    [
+     784.3,
+     582.4
+    ],
+    [
+     729.8,
+     582.4
+    ],
+    [
+     729.8,
+     540.2
+    ],
+    [
+     532.4,
+     540.2
+    ]
+   ],
+   "roof": "flat",
+   "roofColor": "#D4917A",
+   "roofParts": [
+    {
+     "poly": [
+      [
+       532.4,
+       514.3
+      ],
+      [
+       729.8,
+       514.3
+      ],
+      [
+       729.8,
+       540.2
+      ],
+      [
+       532.4,
+       540.2
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       729.8,
+       514.3
+      ],
+      [
+       769.9,
+       514.3
+      ],
+      [
+       769.9,
+       582.4
+      ],
+      [
+       729.8,
+       582.4
+      ]
+     ],
+     "style": "hip"
+    },
+    {
+     "poly": [
+      [
+       769.9,
+       514.3
+      ],
+      [
+       827.1,
+       514.3
+      ],
+      [
+       827.1,
+       527
+      ],
+      [
+       769.9,
+       527
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       425.5,
+       659.2
+      ],
+      [
+       784.3,
+       659.2
+      ],
+      [
+       784.3,
+       692.4
+      ],
+      [
+       425.5,
+       692.4
+      ]
+     ],
+     "style": "gable"
+    }
+   ]
+  },
+  "aquinas-south": {
+   "delete": true
+  },
+  "martin": {
+   "floors": 1,
+   "poly": [
+    [
+     412,
+     8
+    ],
+    [
+     840,
+     8
+    ],
+    [
+     840,
+     181
+    ],
+    [
+     734,
+     181
+    ],
+    [
+     734,
+     215
+    ],
+    [
+     412,
+     215
+    ],
+    [
+     412,
+     132.5
+    ],
+    [
+     487,
+     132.5
+    ],
+    [
+     487,
+     184
+    ],
+    [
+     577,
+     184
+    ],
+    [
+     577,
+     171
+    ],
+    [
+     666,
+     171
+    ],
+    [
+     666,
+     52
+    ],
+    [
+     412,
+     52
+    ]
+   ],
+   "roof": "flat",
+   "roofColor": "#D4917A",
+   "holes": [
+    [
+     [
+      701,
+      52
+     ],
+     [
+      788,
+      52
+     ],
+     [
+      788,
+      126
+     ],
+     [
+      734,
+      126
+     ],
+     [
+      734,
+      171
+     ],
+     [
+      701,
+      171
+     ]
+    ]
+   ],
+   "roofParts": [
+    {
+     "poly": [
+      [
+       412,
+       8
+      ],
+      [
+       788,
+       8
+      ],
+      [
+       788,
+       52
+      ],
+      [
+       412,
+       52
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       412,
+       132.5
+      ],
+      [
+       487,
+       132.5
+      ],
+      [
+       487,
+       215
+      ],
+      [
+       412,
+       215
+      ]
+     ],
+     "style": "hip"
+    },
+    {
+     "poly": [
+      [
+       487,
+       184
+      ],
+      [
+       577,
+       184
+      ],
+      [
+       577,
+       215
+      ],
+      [
+       487,
+       215
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       577,
+       171
+      ],
+      [
+       734,
+       171
+      ],
+      [
+       734,
+       215
+      ],
+      [
+       577,
+       215
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       666,
+       52
+      ],
+      [
+       701,
+       52
+      ],
+      [
+       701,
+       171
+      ],
+      [
+       666,
+       171
+      ]
+     ],
+     "style": "gable"
+    },
+    {
+     "poly": [
+      [
+       734,
+       126
+      ],
+      [
+       788,
+       126
+      ],
+      [
+       788,
+       181
+      ],
+      [
+       734,
+       181
+      ]
+     ],
+     "style": "hip"
+    }
+   ]
+  },
+  "martin-north": {
+   "delete": true
+  },
+  "martin-east": {
+   "delete": true
+  },
+  "albert": {
+   "floors": 3,
+   "poly": [
+    [
+     770,
+     748
+    ],
+    [
+     822,
+     748
+    ],
+    [
+     822,
+     870
+    ],
+    [
+     770,
+     870
+    ]
+   ]
+  },
+  "albert-south": {
+   "floors": 3,
+   "poly": [
+    [
+     630,
+     840
+    ],
+    [
+     770,
+     840
+    ],
+    [
+     770,
+     870
+    ],
+    [
+     630,
+     870
+    ]
+   ]
+  },
+  "pius": {
+   "floors": 1,
+   "floorHeight": 6
+  },
+  "chapel": {
+   "floors": 1,
+   "floorHeight": 7
+  },
+  "raymond-1": {
+   "floors": 1
+  },
+  "raymond-2": {
+   "floors": 1
+  },
+  "raymond-3": {
+   "floors": 1
+  },
+  "raymond-4": {
+   "floors": 1
+  },
+  "raymond-5": {
+   "floors": 1
+  },
+  "raymond-6": {
+   "floors": 1
+  },
+  "raymond-core": {
+   "floors": 1
+  },
+  "raymond-annex": {
+   "floors": 1
+  },
+  "raymond-l-n": {
+   "floors": 1
+  },
+  "raymond-l-s": {
+   "floors": 1
+  },
+  "raymond-small": {
+   "floors": 1
+  },
+  "dominic-upper": {
+   "add": true,
+   "poly": [
+    [
+     699,
+     278
+    ],
+    [
+     731,
+     278
+    ],
+    [
+     731,
+     429
+    ],
+    [
+     699,
+     429
+    ]
+   ],
+   "name": "ST. Dominic BLDG",
+   "group": "dominic",
+   "roof": "hip",
+   "floors": 2,
+   "level": 1
+  },
+  "dominic-link": {
+   "poly": [
+    [
+     715,
+     217
+    ],
+    [
+     741,
+     217
+    ],
+    [
+     741,
+     258
+    ],
+    [
+     715,
+     258
+    ]
+   ],
+   "canopy": true,
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3
+  },
+  "dominic-upper-entry": {
+   "add": true,
+   "poly": [
+    [
+     731,
+     334
+    ],
+    [
+     745,
+     334
+    ],
+    [
+     745,
+     373
+    ],
+    [
+     731,
+     373
+    ]
+   ],
+   "name": "ST. Dominic BLDG",
+   "group": "dominic",
+   "roof": "hip",
+   "floors": 2,
+   "level": 1
+  },
+  "albert-east": {
+   "delete": true
+  },
+  "walk-east": {
+   "poly": [
+    [
+     839,
+     580
+    ],
+    [
+     850,
+     580
+    ],
+    [
+     850,
+     834
+    ],
+    [
+     822,
+     834
+    ],
+    [
+     822,
+     825
+    ],
+    [
+     839,
+     825
+    ]
+   ],
+   "canopy": true,
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "name": "Covered walkway"
+  },
+  "aquinas-2f-east": {
+   "add": true,
+   "poly": [
+    [
+     784.3,
+     580
+    ],
+    [
+     827.1,
+     580
+    ],
+    [
+     827.1,
+     692.4
+    ],
+    [
+     784.3,
+     692.4
+    ]
+   ],
+   "name": "ST. Thomas Aquinas BLDG",
+   "group": "aquinas",
+   "roof": "gable",
+   "floors": 1,
+   "level": 1
+  },
+  "aquinas-3f-cashier": {
+   "add": true,
+   "poly": [
+    [
+     769.9,
+     527
+    ],
+    [
+     827.1,
+     527
+    ],
+    [
+     827.1,
+     580
+    ],
+    [
+     769.9,
+     580
+    ]
+   ],
+   "name": "ST. Thomas Aquinas BLDG",
+   "group": "aquinas",
+   "roof": "hip",
+   "floors": 2,
+   "level": 1
+  },
+  "elementary-canteen": {
+   "delete": true
+  },
+  "elementary-south-east": {
+   "delete": true
+  },
+  "martin-3f": {
+   "add": true,
+   "poly": [
+    [
+     788,
+     8
+    ],
+    [
+     840,
+     8
+    ],
+    [
+     840,
+     181
+    ],
+    [
+     788,
+     181
+    ]
+   ],
+   "name": "ST. Martin BLDG",
+   "group": "martin",
+   "roof": "flat",
+   "floors": 2,
+   "level": 1
+  },
+  "walk-south-west": {
+   "canopy": true,
+   "roof": "flat",
+   "floors": 1,
+   "floorHeight": 3,
+   "name": "Covered walkway"
+  },
+  "macias": {
+   "poly": [
+    [
+     590,
+     755
+    ],
+    [
+     630,
+     755
+    ],
+    [
+     630,
+     870
+    ],
+    [
+     590,
+     870
+    ]
+   ]
+  },
+  "macias-south": {
+   "delete": true
+  }
+ },
+ "areas": {
+  "parking-angelico": {
+   "poly": [
+    [
+     286,
+     734
+    ],
+    [
+     382,
+     734
+    ],
+    [
+     346,
+     793
+    ],
+    [
+     286,
+     793
+    ]
+   ]
+  },
+  "parking-south": {
+   "poly": [
+    [
+     595,
+     733
+    ],
+    [
+     815,
+     733
+    ],
+    [
+     815,
+     748
+    ],
+    [
+     595,
+     748
+    ]
+   ]
+  },
+  "parking-middle": {
+   "add": true,
+   "kind": "parking",
+   "poly": [
+    [
+     734,
+     499
+    ],
+    [
+     860,
+     499
+    ],
+    [
+     860,
+     513
+    ],
+    [
+     734,
+     513
+    ]
+   ]
+  }
+ },
+ "roads": {
+  "road-boundary": {
+   "delete": true
+  }
+ },
+ "walkways": {}
+}

@@ -1,0 +1,111 @@
+{
+ "source": "dome-ground.pdf",
+ "rotation": 90,
+ "rooms": [
+  {
+   "name": "CSWCA Office",
+   "x": 376.5,
+   "y": 182.9
+  },
+  {
+   "name": "CSWCA Extension",
+   "x": 522.3,
+   "y": 183.8
+  },
+  {
+   "name": "CSWCA Office",
+   "x": 340.6,
+   "y": 187
+  },
+  {
+   "name": "CSWCA Storage",
+   "x": 559.7,
+   "y": 188.1
+  },
+  {
+   "name": "Herald Office",
+   "x": 299.5,
+   "y": 198
+  },
+  {
+   "name": "Union Office",
+   "x": 601.4,
+   "y": 198.4
+  },
+  {
+   "name": "Female CR",
+   "x": 272.2,
+   "y": 221.5
+  },
+  {
+   "name": "Female CR",
+   "x": 625.4,
+   "y": 223.8
+  },
+  {
+   "name": "Male CR",
+   "x": 232.3,
+   "y": 261.4
+  },
+  {
+   "name": "Female CR",
+   "x": 661.7,
+   "y": 261.5
+  },
+  {
+   "name": "CSWCA GYM",
+   "x": 685,
+   "y": 285.6
+  },
+  {
+   "name": "Strings Chorale Dance Troupe Area",
+   "x": 216.6,
+   "y": 346.5
+  },
+  {
+   "name": "Male CR",
+   "x": 233.3,
+   "y": 435.2
+  },
+  {
+   "name": "Male CR",
+   "x": 660.8,
+   "y": 436.8
+  },
+  {
+   "name": "Female CR",
+   "x": 623.3,
+   "y": 473.3
+  },
+  {
+   "name": "Female CR",
+   "x": 275.1,
+   "y": 475.4
+  },
+  {
+   "name": "Shower Female",
+   "x": 304.4,
+   "y": 497.7
+  },
+  {
+   "name": "Shower Male",
+   "x": 598,
+   "y": 499
+  },
+  {
+   "name": "Storage Area",
+   "x": 555.4,
+   "y": 508.8
+  },
+  {
+   "name": "Storage Area",
+   "x": 390.8,
+   "y": 509.6
+  },
+  {
+   "name": "Storage Area",
+   "x": 508.9,
+   "y": 515.6
+  }
+ ]
+}

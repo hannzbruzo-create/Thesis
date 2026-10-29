@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { GpsFix } from '../location/campusGps';
 
 type Phase = 'off' | 'requesting' | 'searching' | 'tracking' |
@@ -23,19 +23,37 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
     let subscription: Location.LocationSubscription | null = null;
     let serial = 0;
     let lastSmoothed: GpsFix | null = null;
+    // True while a system dialog we opened (permission, "turn on precise location") is showing.
+    // Those dialogs briefly move the app out of 'active'; that must not pause or restart GPS,
+    // or the app asks again as soon as the dialog closes and loops forever.
+    let asking = false;
+    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
     const stop = () => { ++serial; subscription?.remove(); subscription = null; };
 
     const begin = async () => {
+      if (subscription || asking) return; // already tracking, or a request is in flight
       const turn = ++serial;
+      asking = true;
       setState(previous => ({...previous, phase:'requesting', message:'Requesting GPS access...'}));
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        // Only show the permission dialog when it is needed (and still allowed to be shown).
+        let permission = await Location.getForegroundPermissionsAsync();
+        if (permission.status !== 'granted' && permission.canAskAgain) {
+          permission = await Location.requestForegroundPermissionsAsync();
+        }
         if (!active || turn !== serial) return;
-        if (status !== 'granted') {
+        if (permission.status !== 'granted') {
           setState(previous=>({...previous,phase:'permission-denied',
-            message:'Location permission denied. Allow TomaSafe to access location in Settings.'}));
+            message: permission.canAskAgain
+              ? 'Location permission denied. Tap Retry GPS and choose "While using the app".'
+              : 'Location is blocked for TomaSafe. Tap Retry GPS to open Settings, then allow Location.'}));
           return;
         }
+        // expo-location reads positions from Google's Fused Location Provider on Android. Its best
+        // accuracy needs Google Location Accuracy (Wi-Fi + cell + GPS); if that is off, Android
+        // shows its one-tap "Turn on" dialog here.
+        if (Platform.OS === 'android') await Location.enableNetworkProviderAsync().catch(() => {});
+        if (!active || turn !== serial) return;
         if (!await Location.hasServicesEnabledAsync()) {
           if (active) setState(previous=>({...previous,phase:'unavailable',message:'Turn on device Location services.'}));
           return;
@@ -56,25 +74,9 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
           // Drop stale/out-of-order provider samples; keep live marker responsive.
           if (now - location.timestamp > 12000 ||
               (lastSmoothed && location.timestamp <= lastSmoothed.timestamp)) return;
-          const raw: GpsFix = {latitude, longitude, accuracy, timestamp:location.timestamp};
-          let fix = raw;
-          if (lastSmoothed) {
-            const dt = Math.max(0.1, (raw.timestamp-lastSmoothed.timestamp)/1000);
-            const meters = Math.hypot(
-              (raw.latitude-lastSmoothed.latitude)*111000,
-              (raw.longitude-lastSmoothed.longitude)*108000
-            );
-            // Reject one-off physically implausible jumps but allow reacquisition
-            // after the device has been without a GPS fix for several seconds.
-            if (dt < 5 && meters > Math.max(40, dt * 12 + 25)) return;
-            // Light adaptive smoothing, not a multi-second lagging average.
-            const alpha = accuracy != null && accuracy > 12 ? 0.60 : 0.85;
-            fix = {
-              ...raw,
-              latitude:lastSmoothed.latitude+(latitude-lastSmoothed.latitude)*alpha,
-              longitude:lastSmoothed.longitude+(longitude-lastSmoothed.longitude)*alpha,
-            };
-          }
+          // Raw fused fix: smoothing, jump rejection and step/compass fusion happen in one place
+          // (GpsKalmanFilter), so the position is not smoothed twice (which made it lag behind).
+          const fix: GpsFix = {latitude, longitude, accuracy, timestamp:location.timestamp};
           lastSmoothed=fix;
           setState({phase:'tracking', message:'Receiving live GPS updates', fix});
         });
@@ -83,21 +85,31 @@ export default function useLiveCampusLocation(enabled: boolean, retryKey = 0): L
       } catch (err) {
         if (active && turn === serial) setState(previous=>({...previous,phase:'error',
           message:err instanceof Error ? err.message : 'GPS unavailable on this device.'}));
+      } finally {
+        asking = false; // only one request runs at a time, so this is always ours
       }
     };
 
     const appSub = AppState.addEventListener('change', next => {
       if (!active) return;
-      if (next !== 'active') {
+      if (next === 'active') {
+        if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
+        void begin(); // no-op if GPS is still running; otherwise restart with a fresh fix
+        return;
+      }
+      // Ignore short trips out of 'active' (system dialogs, notification shade, our own requests);
+      // pause only when the user has really left the app for a few seconds.
+      if (asking || next !== 'background' || pauseTimer) return;
+      pauseTimer = setTimeout(() => {
+        pauseTimer = null;
+        if (!active || AppState.currentState === 'active') return;
         stop();
         setState(previous=>({...previous, phase:'background', message:'GPS paused. Keeping the last verified route.'}));
-      } else {
-        void begin(); // restart with a fresh fix after returning to foreground
-      }
+      }, 3000);
     });
     if (AppState.currentState === 'active') void begin();
     else setState(previous=>({...previous,phase:'background',message:'GPS starts when TomaSafe is in the foreground.'}));
-    return () => { active=false; stop(); appSub.remove(); };
+    return () => { active=false; stop(); appSub.remove(); if (pauseTimer) clearTimeout(pauseTimer); };
   }, [enabled, retryKey]);
   return state;
 }

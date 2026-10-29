@@ -2,21 +2,35 @@ import {
   WALKABLE_EDGES, WALKABLE_NODES, WALKABLE_NODES_BY_ID,
   type GraphNode,
 } from './walkableGraph';
+import { DEFAULT_PROFILE, edgeWeight, type RoutingProfile } from './routingProfiles';
 
 export type DijkstraPaths = {
   distances: Record<string, number>;
   previous: Record<string, string | null>;
 };
 
-const neighbors: Record<string, { id: string; weight: number }[]> = {};
-for (const node of WALKABLE_NODES) neighbors[node.id] = [];
 for (const edge of WALKABLE_EDGES) {
   if (!WALKABLE_NODES_BY_ID[edge.from] || !WALKABLE_NODES_BY_ID[edge.to] ||
-      !Number.isFinite(edge.weight) || edge.weight <= 0) {
+      !Number.isFinite(edge.length) || edge.length <= 0) {
     throw new Error(`Invalid walkable graph edge ${edge.from} -> ${edge.to}`);
   }
-  neighbors[edge.from].push({ id: edge.to, weight: edge.weight });
-  neighbors[edge.to].push({ id: edge.from, weight: edge.weight });
+}
+type Neighbors = Record<string, { id: string; weight: number }[]>;
+/** Weighted adjacency lists, built once per emergency profile on first use. */
+const neighborsByProfile = new Map<string, Neighbors>();
+function neighborsFor(profile: RoutingProfile): Neighbors {
+  const cached = neighborsByProfile.get(profile.id);
+  if (cached) return cached;
+  const neighbors: Neighbors = {};
+  for (const node of WALKABLE_NODES) neighbors[node.id] = [];
+  for (const edge of WALKABLE_EDGES) {
+    const a = WALKABLE_NODES_BY_ID[edge.from], b = WALKABLE_NODES_BY_ID[edge.to];
+    const weight = edgeWeight(edge, a, b, profile);
+    neighbors[edge.from].push({ id: edge.to, weight });
+    neighbors[edge.to].push({ id: edge.from, weight });
+  }
+  neighborsByProfile.set(profile.id, neighbors);
+  return neighbors;
 }
 
 // Priority queue keeps a full-campus grid practical on mobile (O(E log V)).
@@ -57,7 +71,9 @@ class MinHeap {
 }
 
 /** Dijkstra across visually estimated open space AND user-edited roads. */
-export function shortestPathsFromAnchors(anchors: {id: string; weight: number}[]): DijkstraPaths {
+export function shortestPathsFromAnchors(anchors: {id: string; weight: number}[],
+  profile: RoutingProfile = DEFAULT_PROFILE): DijkstraPaths {
+  const neighbors = neighborsFor(profile);
   const distances: Record<string, number> = {};
   const previous: Record<string, string | null> = {};
   for (const node of WALKABLE_NODES) {

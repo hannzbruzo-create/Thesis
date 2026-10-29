@@ -1,0 +1,11 @@
+{
+ "source": "angelico-ground.pdf",
+ "rotation": 180,
+ "rooms": [
+  {
+   "name": "Faculty Office",
+   "x": 747.7,
+   "y": 584.8
+  }
+ ]
+}
