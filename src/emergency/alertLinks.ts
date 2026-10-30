@@ -2,8 +2,11 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { NotificationResponse } from 'expo-notifications';
 import { parseEmergencyType, type EmergencyType } from './emergencyTypes';
 
-/** An emergency alert that should open the guide (or go straight to the map when `outside`). */
-export type AlertRequest = { type: EmergencyType; outside: boolean };
+/**
+ * An emergency alert that should open the guide (or go straight to the map when `outside`).
+ * `incidentId` (from the push) is the server's alert, for safety status reports.
+ */
+export type AlertRequest = { type: EmergencyType; outside: boolean; incidentId?: number };
 
 /**
  * Reads an alert link from the SMS or a web page, e.g.
@@ -38,6 +41,34 @@ export const ALERT_CATEGORY = 'emergency-alert';
 /** Android channel for alerts: loudest importance, shows on the lock screen. */
 export const ALERT_CHANNEL = 'emergency';
 
+let permissionRequest: Promise<boolean> | null = null;
+
+/**
+ * Creates the alert channel, then asks for notification permission once (callers share one
+ * request). Android 13+ only shows the permission prompt after a channel exists, so the order
+ * matters. Resolves true when notifications are allowed. Always false in Expo Go.
+ */
+export function ensureNotificationPermission(): Promise<boolean> {
+  if (!notificationsSupported) return Promise.resolve(false);
+  if (permissionRequest) return permissionRequest;
+  const N = require('expo-notifications') as typeof import('expo-notifications');
+  permissionRequest = (async () => {
+    await N.setNotificationChannelAsync(ALERT_CHANNEL, {
+      name: 'Emergency alerts',
+      importance: N.AndroidImportance.MAX,
+      sound: 'default',
+      vibrationPattern: [0, 600, 300, 600, 300, 600],
+      bypassDnd: true,
+      lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
+    }).catch(() => {});
+    const current = await N.getPermissionsAsync();
+    if (current.granted) return true;
+    if (!current.canAskAgain) return false;
+    return (await N.requestPermissionsAsync()).granted;
+  })().catch(() => false).finally(() => { permissionRequest = null; });
+  return permissionRequest;
+}
+
 /**
  * Sets up emergency push notifications (channel, buttons, foreground display) and calls
  * `onAlert` when the user taps an alert or one of its buttons, including the tap that launched
@@ -51,15 +82,7 @@ export function listenForAlertNotifications(onAlert: (request: AlertRequest) => 
   N.setNotificationHandler({
     handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
   });
-  void N.requestPermissionsAsync().catch(() => {});
-  void N.setNotificationChannelAsync(ALERT_CHANNEL, {
-    name: 'Emergency alerts',
-    importance: N.AndroidImportance.MAX,
-    sound: 'default',
-    vibrationPattern: [0, 600, 300, 600, 300, 600],
-    bypassDnd: true,
-    lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
-  }).catch(() => {});
+  void ensureNotificationPermission();
   void N.setNotificationCategoryAsync(ALERT_CATEGORY, [
     { identifier: 'open', buttonTitle: 'Open guide', options: { opensAppToForeground: true } },
     { identifier: 'outside', buttonTitle: "I'm safe outside", options: { opensAppToForeground: true } },
@@ -67,8 +90,10 @@ export function listenForAlertNotifications(onAlert: (request: AlertRequest) => 
 
   const handle = (response: NotificationResponse | null) => {
     if (!response) return;
-    const type = parseEmergencyType(response.notification.request.content.data as Record<string, unknown>);
-    if (type) onAlert({ type, outside: response.actionIdentifier === 'outside' });
+    const data = response.notification.request.content.data as Record<string, unknown>;
+    const type = parseEmergencyType(data);
+    const incidentId = Number(data?.incidentId);
+    if (type) onAlert({ type, outside: response.actionIdentifier === 'outside', incidentId: Number.isInteger(incidentId) ? incidentId : undefined });
   };
   void N.getLastNotificationResponseAsync().then(handle).catch(() => {});
   const sub = N.addNotificationResponseReceivedListener(handle);

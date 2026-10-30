@@ -43,6 +43,13 @@ const BOUND_MAX = 820;
 const MAX_ZOOM_OUT = 1.2;
 /** Follow mode turns the map only when the heading changes by more than this (degrees). */
 const HEADING_DEADBAND = 12;
+/** Taps and fling momentum are ignored this soon after two fingers were on the screen (ms). */
+const MULTI_TOUCH_GRACE_MS = 400;
+/** A one-finger release slower than this (px/s) stops the map instead of flinging it. */
+const MIN_FLING_SPEED = 250;
+/** Per-event pinch scale is clamped to this range (Android spikes when a finger lifts). */
+const MIN_SCALE_STEP = 0.85;
+const MAX_SCALE_STEP = 1.18;
 const clamp = (v: number, lo: number, hi: number) => {
   'worklet';
   return Math.min(hi, Math.max(lo, v));
@@ -95,6 +102,10 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
   const twoFinger = useSharedValue(0);
   const pinchTotal = useSharedValue(1);
   const rotateTotal = useSharedValue(0);
+  // Last time two fingers were down, and the pinch focal point of the previous event.
+  const lastMultiTouch = useSharedValue(0);
+  const focalX = useSharedValue(0);
+  const focalY = useSharedValue(0);
 
   /** Keep the ground point under (sx, sy) fixed while `change` alters the camera. */
   const pivot = (sx: number, sy: number, change: () => void) => {
@@ -115,6 +126,27 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
     cancelAnimation(camera.distance); cancelAnimation(camera.bearing);
   };
 
+  /** Move the map so the ground point under (fromX, fromY) ends up under (toX, toY). */
+  const drag = (fromX: number, fromY: number, toX: number, toY: number) => {
+    'worklet';
+    const b = cameraBasis(readCamera(camera), camera.width.value, camera.height.value);
+    const from = screenToGround(b, fromX, fromY);
+    const to = screenToGround(b, toX, toY);
+    if (!from || !to) return;
+    let dx = from.x - to.x, dy = from.y - to.y;
+    // Near the horizon in 3D a few pixels are a long way on the ground: cap one event's move.
+    const limit = camera.distance.value * 0.25, len = Math.hypot(dx, dy);
+    if (len > limit) { dx *= limit / len; dy *= limit / len; }
+    camera.targetX.value = clamp(camera.targetX.value + dx, BOUND_MIN, BOUND_MAX);
+    camera.targetY.value = clamp(camera.targetY.value + dy, BOUND_MIN, BOUND_MAX);
+  };
+
+  /** True while, or shortly after, two fingers were on the screen. */
+  const recentMultiTouch = () => {
+    'worklet';
+    return Date.now() - lastMultiTouch.value < MULTI_TOUCH_GRACE_MS;
+  };
+
   const gesture = useMemo(() => {
     const pan = Gesture.Pan()
       .maxPointers(1)
@@ -123,44 +155,71 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
         if (onUserMove) runOnJS(onUserMove)();
       })
       .onChange(e => {
-        const b = cameraBasis(readCamera(camera), camera.width.value, camera.height.value);
-        const from = screenToGround(b, e.x - e.changeX, e.y - e.changeY);
-        const to = screenToGround(b, e.x, e.y);
-        if (!from || !to) return;
-        camera.targetX.value = clamp(camera.targetX.value + from.x - to.x, BOUND_MIN, BOUND_MAX);
-        camera.targetY.value = clamp(camera.targetY.value + from.y - to.y, BOUND_MIN, BOUND_MAX);
+        // While two fingers are down the pinch moves the map; don't move it twice.
+        if (e.numberOfPointers > 1) return;
+        drag(e.x - e.changeX, e.y - e.changeY, e.x, e.y);
       })
       .onEnd(e => {
+        // No fling when the pan ended because a second finger landed, or the release was slow.
+        if (recentMultiTouch() || Math.hypot(e.velocityX, e.velocityY) < MIN_FLING_SPEED) return;
         // Momentum: convert the screen fling velocity to a ground velocity.
         const w = camera.width.value, h = camera.height.value;
         const b = cameraBasis(readCamera(camera), w, h);
         const a = screenToGround(b, w / 2, h / 2);
         const c = screenToGround(b, w / 2 + e.velocityX * 0.01, h / 2 + e.velocityY * 0.01);
         if (!a || !c) return;
-        camera.targetX.value = withDecay({ velocity: -(c.x - a.x) * 100, deceleration: 0.994, clamp: [BOUND_MIN, BOUND_MAX] });
-        camera.targetY.value = withDecay({ velocity: -(c.y - a.y) * 100, deceleration: 0.994, clamp: [BOUND_MIN, BOUND_MAX] });
+        camera.targetX.value = withDecay({ velocity: -(c.x - a.x) * 100, deceleration: 0.985, clamp: [BOUND_MIN, BOUND_MAX] });
+        camera.targetY.value = withDecay({ velocity: -(c.y - a.y) * 100, deceleration: 0.985, clamp: [BOUND_MIN, BOUND_MAX] });
       });
 
     const pinch = Gesture.Pinch()
-      .onStart(() => { stopMotion(); pinchTotal.value = 1; })
+      .onTouchesDown(e => { if (e.numberOfTouches > 1) lastMultiTouch.value = Date.now(); })
+      .onStart(e => {
+        stopMotion();
+        pinchTotal.value = 1;
+        focalX.value = e.focalX;
+        focalY.value = e.focalY;
+        lastMultiTouch.value = Date.now();
+      })
       .onChange(e => {
-        pinchTotal.value *= e.scaleChange;
+        lastMultiTouch.value = Date.now();
+        const fx = focalX.value, fy = focalY.value;
+        focalX.value = e.focalX;
+        focalY.value = e.focalY;
+        // With one finger left the focal point and scale jump: ignore until two are down again.
+        if (e.numberOfPointers < 2) return;
+        const step = clamp(e.scaleChange, MIN_SCALE_STEP, MAX_SCALE_STEP);
+        pinchTotal.value *= step;
         if (twoFinger.value === 0 && Math.abs(Math.log(pinchTotal.value)) > 0.06) twoFinger.value = 2;
         if (twoFinger.value === 1) return;
+        // Two-finger drag moves the map with the fingers, then zoom around them.
+        drag(fx, fy, e.focalX, e.focalY);
         pivot(e.focalX, e.focalY, () => {
-          camera.distance.value = clamp(camera.distance.value / e.scaleChange, MIN_DISTANCE, maxDistance.value);
+          camera.distance.value = clamp(camera.distance.value / step, MIN_DISTANCE, maxDistance.value);
         });
+      })
+      .onFinalize(() => {
+        lastMultiTouch.value = Date.now();
+        pinchTotal.value = 1;
+        twoFinger.value = 0;
       });
 
     const rotate = Gesture.Rotation()
-      .onStart(() => { rotateTotal.value = 0; })
+      .onStart(() => { rotateTotal.value = 0; lastMultiTouch.value = Date.now(); })
       .onChange(e => {
+        lastMultiTouch.value = Date.now();
+        if (e.numberOfPointers < 2) return;
         rotateTotal.value += e.rotationChange;
         if (twoFinger.value === 0 && Math.abs(rotateTotal.value) > 0.09) twoFinger.value = 2;
         if (twoFinger.value === 1) return;
         pivot(e.anchorX, e.anchorY, () => {
           camera.bearing.value -= e.rotationChange;
         });
+      })
+      .onFinalize(() => {
+        lastMultiTouch.value = Date.now();
+        rotateTotal.value = 0;
+        twoFinger.value = 0;
       });
 
     const tilt = Gesture.Pan()
@@ -177,9 +236,13 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
       })
       .onFinalize(() => { twoFinger.value = 0; });
 
+    // Taps right after a two-finger touch are ignored: two quick pinches must never count as a double-tap zoom.
     const doubleTap = Gesture.Tap()
       .numberOfTaps(2)
+      .maxDistance(10)
+      .maxDelay(300)
       .onEnd(e => {
+        if (recentMultiTouch()) return;
         const b = cameraBasis(readCamera(camera), camera.width.value, camera.height.value);
         const p = screenToGround(b, e.x, e.y);
         if (p) {
@@ -191,8 +254,9 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
 
     const singleTap = Gesture.Tap()
       .maxDuration(250)
+      .maxDistance(10)
       .onEnd(e => {
-        if (!onTap) return;
+        if (!onTap || recentMultiTouch()) return;
         const b = cameraBasis(readCamera(camera), camera.width.value, camera.height.value);
         const p = screenToGround(b, e.x, e.y);
         if (p) runOnJS(onTap)({ x: p.x, y: p.y });
@@ -213,6 +277,7 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
   }, [onFirstLayout]);
 
   const zoomBy = useCallback((factor: number) => {
+    stopMotion();
     camera.distance.value = withTiming(clamp(camera.distance.value / factor, MIN_DISTANCE, maxDistance.value), EASE);
   }, []);
 

@@ -18,10 +18,15 @@ type Props = {
   bottom?: number;
 };
 
+/** Size of the round location button and of each control button, px. */
+const LOCATE_SIZE = 48;
+const BUTTON_SIZE = 46;
+
 /**
- * Map controls in two small groups under the header (zoom; view and labels) plus one round
- * location button above the bottom card. The location button recentres on you; with live GPS
- * it also starts/stops following your heading. Long-press it to fit the whole campus.
+ * Map controls in one column on the right, low down where the thumb reaches: view and labels,
+ * then zoom, then the round location button just above the bottom card. The location button
+ * recentres on you; with live GPS it also starts/stops following your heading. Long-press it to
+ * fit the whole campus.
  */
 export default function MapControls3D({ mode3D, onZoomIn, onZoomOut, onToggleMode, onRecenter, onFit,
   hasLiveLocation, following, onToggleFollow, showLabels, onToggleLabels, bottom = 230 }: Props) {
@@ -32,16 +37,7 @@ export default function MapControls3D({ mode3D, onZoomIn, onZoomOut, onToggleMod
   };
   return (
     <>
-      <View style={s.column} pointerEvents="box-none">
-        <View style={s.group}>
-          <Pressable style={s.button} onPress={onZoomIn} accessibilityRole="button" accessibilityLabel="Zoom in">
-            <MaterialCommunityIcons name="plus" size={20} color="#334155" />
-          </Pressable>
-          <View style={s.divider} />
-          <Pressable style={s.button} onPress={onZoomOut} accessibilityRole="button" accessibilityLabel="Zoom out">
-            <MaterialCommunityIcons name="minus" size={20} color="#334155" />
-          </Pressable>
-        </View>
+      <View style={[s.column, { bottom: bottom + LOCATE_SIZE + 12 }]} pointerEvents="box-none">
         <View style={s.group}>
           <Pressable style={s.button} onPress={onToggleMode} accessibilityRole="button"
             accessibilityLabel={mode3D ? 'Switch to 2D top-down view' : 'Switch to 3D view'}>
@@ -50,8 +46,17 @@ export default function MapControls3D({ mode3D, onZoomIn, onZoomOut, onToggleMod
           <View style={s.divider} />
           <Pressable style={s.button} onPress={onToggleLabels} accessibilityRole="button"
             accessibilityLabel={showLabels ? 'Hide building names' : 'Show building names'}>
-            <MaterialCommunityIcons name={showLabels ? 'label-outline' : 'label-off-outline'} size={19}
+            <MaterialCommunityIcons name={showLabels ? 'label-outline' : 'label-off-outline'} size={20}
               color={showLabels ? '#2563EB' : '#94A3B8'} />
+          </Pressable>
+        </View>
+        <View style={s.group}>
+          <Pressable style={s.button} onPress={onZoomIn} accessibilityRole="button" accessibilityLabel="Zoom in">
+            <MaterialCommunityIcons name="plus" size={22} color="#334155" />
+          </Pressable>
+          <View style={s.divider} />
+          <Pressable style={s.button} onPress={onZoomOut} accessibilityRole="button" accessibilityLabel="Zoom out">
+            <MaterialCommunityIcons name="minus" size={22} color="#334155" />
           </Pressable>
         </View>
       </View>
@@ -72,13 +77,13 @@ export default function MapControls3D({ mode3D, onZoomIn, onZoomOut, onToggleMod
 
 const shadow = { elevation: 5, shadowColor: '#0F172A', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } };
 const s = StyleSheet.create({
-  column: { position: 'absolute', right: 12, top: 76, gap: 8, zIndex: 25 },
-  group: { width: 42, borderRadius: 12, backgroundColor: '#FFFFFF', overflow: 'hidden', ...shadow },
-  button: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  column: { position: 'absolute', right: 12, gap: 10, zIndex: 25 },
+  group: { width: BUTTON_SIZE, borderRadius: 14, backgroundColor: '#FFFFFF', overflow: 'hidden', ...shadow },
+  button: { width: BUTTON_SIZE, height: BUTTON_SIZE, alignItems: 'center', justifyContent: 'center' },
   divider: { height: 1, backgroundColor: '#E2E8F0' },
-  modeText: { color: '#2563EB', fontSize: 13, fontWeight: '800' },
+  modeText: { color: '#2563EB', fontSize: 14, fontWeight: '800' },
   locate: {
-    position: 'absolute', right: 12, width: 46, height: 46, borderRadius: 23, backgroundColor: '#2563EB',
+    position: 'absolute', right: 11, width: LOCATE_SIZE, height: LOCATE_SIZE, borderRadius: LOCATE_SIZE / 2, backgroundColor: '#2563EB',
     alignItems: 'center', justifyContent: 'center', zIndex: 25, ...shadow,
   },
   locateOn: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#2563EB' },

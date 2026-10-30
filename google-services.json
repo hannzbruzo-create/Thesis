@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "764248308938",
+    "project_id": "evacuation-system-f8d2e",
+    "storage_bucket": "evacuation-system-f8d2e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764248308938:android:a811080fe96049471c0833",
+        "android_client_info": {
+          "package_name": "com.ustlegazpi.tomasafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMRYuqXXQvB0EwNUxBiHAGmSrtfFXq0HA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764248308938:android:f1738f9f329b37af1c0833",
+        "android_client_info": {
+          "package_name": "com.naruoz.tomasafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMRYuqXXQvB0EwNUxBiHAGmSrtfFXq0HA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

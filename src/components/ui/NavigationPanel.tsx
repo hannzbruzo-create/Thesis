@@ -9,13 +9,11 @@ type Props = {
   plan: PreviewPlan | null;
   emergencyMode: EmergencyType;
   liveStatus: string;
-  outsideCampus: boolean;
   routeWarning?: boolean;
-  /** Smoothed GPS accuracy in metres, when known. */
-  accuracyM?: number | null;
-  onChangeEmergency: () => void;
+  /** The user is safe: stop navigation and go back to the alert chooser. */
+  onSafe: () => void;
   onRetryGps: () => void;
-  /** Long-press the GPS line to open the GPS test panel (field testing). */
+  /** Long-press the card to open the GPS test panel (field testing). */
   onToggleGpsTest?: () => void;
 };
 
@@ -36,37 +34,23 @@ const TIPS: Record<EmergencyType, { walking: string; arrived: string }> = {
 };
 
 /**
- * Bottom card for live navigation, in one of four states: finding your location, outside the
- * campus, walking to the evacuation area, and arrived. Only the action that matters for the
- * current state is a button; changing the emergency is a small link.
+ * Bottom card for live navigation, in one of three states: finding your location, walking to the
+ * evacuation area, and arrived. "I'm safe" at the bottom ends navigation at any time, next to
+ * "Retry GPS" while there is no fix yet. (No route / outside the campus is a separate warning,
+ * see NoRouteWarning.)
  */
-export default function NavigationPanel({ plan, emergencyMode, liveStatus, outsideCampus, routeWarning = false,
-  accuracyM, onChangeEmergency, onRetryGps, onToggleGpsTest }: Props) {
+export default function NavigationPanel({ plan, emergencyMode, liveStatus, routeWarning = false,
+  onSafe, onRetryGps, onToggleGpsTest }: Props) {
   const remaining = plan ? routeLengthMetres(plan.route) : null;
   const arrived = remaining != null && remaining <= ARRIVED_METRES;
-  const gpsText = accuracyM != null && Number.isFinite(accuracyM) ? `GPS ±${Math.max(1, Math.round(accuracyM))} m` : 'GPS —';
 
   let body: React.ReactNode;
-  if (outsideCampus) {
-    body = (
-      <>
-        <Head icon={<Badge bg="#FEF3C7"><MaterialCommunityIcons name="map-marker-off" size={21} color="#B45309" /></Badge>}
-          eyebrow="OUTSIDE THE CAMPUS MAP" title="No route here" />
-        <Tip tone="warn" icon="alert-circle-outline">
-          TomaSafe navigation only works inside UST–Legazpi Rawis Campus. Move onto campus to get a route.
-        </Tip>
-      </>
-    );
-  } else if (!plan) {
+  if (!plan) {
     body = (
       <>
         <Head icon={<Badge bg="#EFF6FF"><ActivityIndicator size="small" color="#2563EB" /></Badge>}
           eyebrow="FINDING YOUR LOCATION" title="Getting a GPS fix…" />
         <Tip tone="info" icon="information-outline">{liveStatus || 'Stay in an open area. This usually takes a few seconds.'}</Tip>
-        <Pressable style={s.primary} onPress={onRetryGps} accessibilityRole="button">
-          <MaterialCommunityIcons name="refresh" size={17} color="#FFFFFF" />
-          <Text style={s.primaryText}>Retry GPS</Text>
-        </Pressable>
       </>
     );
   } else if (arrived) {
@@ -98,13 +82,20 @@ export default function NavigationPanel({ plan, emergencyMode, liveStatus, outsi
   return (
     <View style={s.sheet} accessibilityLiveRegion="polite">
       <View style={s.grab} />
-      {body}
-      <View style={s.footer}>
-        <Pressable style={{ flex: 1 }} onLongPress={onToggleGpsTest} delayLongPress={600} accessibilityHint="Long-press for the GPS test panel">
-          <Text style={s.footerText} numberOfLines={1}>{outsideCampus ? 'Outside campus' : plan ? `${gpsText} · updates as you walk` : gpsText}</Text>
-        </Pressable>
-        <Pressable onPress={onChangeEmergency} accessibilityRole="button" hitSlop={10}>
-          <Text style={s.link}>Change emergency</Text>
+      <Pressable onLongPress={onToggleGpsTest} delayLongPress={600} accessibilityHint="Long-press for the GPS test panel">
+        {body}
+      </Pressable>
+      <View style={s.actions}>
+        {!plan && (
+          <Pressable style={[s.action, s.retry]} onPress={onRetryGps} accessibilityRole="button">
+            <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
+            <Text style={s.actionText}>Retry GPS</Text>
+          </Pressable>
+        )}
+        <Pressable style={[s.action, s.safe]} onPress={onSafe} accessibilityRole="button"
+          accessibilityLabel="I'm safe. Stop navigation">
+          <MaterialCommunityIcons name="shield-check" size={18} color="#FFFFFF" />
+          <Text style={s.actionText}>I'm safe</Text>
         </Pressable>
       </View>
     </View>
@@ -167,12 +158,12 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, color: '#64748B', marginTop: 1 },
   tip: { flexDirection: 'row', gap: 8, marginTop: 10, paddingVertical: 9, paddingHorizontal: 11, borderRadius: 12 },
   tipText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '600' },
-  primary: {
-    marginTop: 12, height: 44, borderRadius: 12, backgroundColor: '#2563EB',
+  actions: { marginTop: 12, flexDirection: 'row', gap: 10 },
+  action: {
+    flex: 1, height: 48, borderRadius: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
   },
-  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  footer: { marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  footerText: { flex: 1, fontSize: 10.5, fontWeight: '700', color: '#64748B' },
-  link: { fontSize: 12, fontWeight: '800', color: '#2563EB' },
+  retry: { backgroundColor: '#2563EB' },
+  safe: { backgroundColor: '#15803D' },
+  actionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
 });

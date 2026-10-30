@@ -30,7 +30,7 @@ export default function DirectionPill({ instruction, muted, onToggleMute }: {
 
 const s = StyleSheet.create({
   pill: {
-    position: 'absolute', top: 62, left: 12, right: 64, zIndex: 26, height: 34, borderRadius: 12,
+    position: 'absolute', top: 62, left: 12, right: 12, zIndex: 26, height: 34, borderRadius: 12,
     flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 4,
     backgroundColor: 'rgba(255,255,255,0.95)', elevation: 4,
     shadowColor: '#0F172A', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },

@@ -40,6 +40,9 @@ function polygonArea(poly: [number, number][]) {
   return Math.abs(a / 2);
 }
 
+/** Part of the campus (each way, around its middle) framed when navigation starts, before a route. */
+const NAV_START_SPAN = 0.55;
+
 /** The 2D / 3D campus map. Drop-in replacement for components/map/CampusMap. */
 export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSettled, plan, liveGps = false, animateRoute = false,
   insets = { top: 70, bottom: 0 }, accuracyM = null, heading = null, onMapTap = null }: Props) {
@@ -103,9 +106,18 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
     // Triggered by the calculation counter, not by camera re-renders.
   }, [focusRequest?.id]);
 
+  // Navigation started: until a route frames the camera, tilt into 3D and close in on the middle
+  // of the campus (the guide left the map zoomed far out above its tall sheet).
   // Navigation ended (emergency changed or reset): back to the flat overview.
   useEffect(() => {
-    if (liveGps) return;
+    if (liveGps) {
+      if (focusRequest) return;
+      cam.setMode(true);
+      const cx = (campusBounds.minX + campusBounds.maxX) / 2, cy = (campusBounds.minY + campusBounds.maxY) / 2;
+      const hx = (campusBounds.maxX - campusBounds.minX) * NAV_START_SPAN / 2, hy = (campusBounds.maxY - campusBounds.minY) * NAV_START_SPAN / 2;
+      cam.fitBounds({ minX: cx - hx, minY: cy - hy, maxX: cx + hx, maxY: cy + hy }, insets, { padding: 0 });
+      return;
+    }
     setFollowing(false);
     if (cam.mode3D) { cam.setMode(false); cam.fitBounds(campusBounds, insets, { padding: 0.04 }); }
   }, [liveGps]);
@@ -190,7 +202,7 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
         onToggleFollow={() => setFollowing(f => !f)}
         showLabels={showLabels}
         onToggleLabels={() => setShowLabels(v => !v)}
-        bottom={editorOpen ? Math.round(screenHeight * 0.52) + 24 : 270}
+        bottom={editorOpen ? Math.round(screenHeight * 0.52) + 24 : insets.bottom + 20}
       />
       {!editorOpen && focus && (
         <BuildingCard name={focus.name} floors={focus.floors} floor={floor} roomCount={focus.perFloor[floor] ?? 0}

@@ -1,12 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Share, StatusBar, useWindowDimensions, View } from 'react-native';
+import { AppState, Linking, Share, StatusBar, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import * as Speech from 'expo-speech';
 import CampusMap3D from '../map3d/CampusMap3D';
 import { useModelStore } from '../map3d/ModelStore';
 import HeaderBar from '../components/ui/HeaderBar';
 import NavigationPanel from '../components/ui/NavigationPanel';
 import EmergencyInstructions from '../components/ui/EmergencyInstructions';
 import EmergencyChooser from '../components/ui/EmergencyChooser';
+import NoRouteWarning from '../components/ui/NoRouteWarning';
+import SafeConfirmPopup from '../components/ui/SafeConfirmPopup';
+import ProfileSheet from '../components/ui/ProfileSheet';
+import { EVACUATION_AREAS, evacuationAreaAt, type EvacuationArea } from '../data/evacuationAreas';
+import {
+  getPushStatus, loadUser, onProfileChange, onPushStatus, registerForPush, reportStatus, saveProfile, setIncident,
+  startReporting, type Profile, type PushStatus, type ReportArea,
+} from '../services/safetyReports';
 import type { EmergencyType } from '../emergency/emergencyTypes';
 import { planEvacuation, type PreviewPlan } from '../navigation/routePreview';
 import type { Point, GraphNode } from '../navigation/walkableGraph';
@@ -28,7 +37,7 @@ import styles from '../styles/screens/HomeScreen.styles';
 
 type Props = {
   /** An alert link or notification tap; `outside` skips the guide and opens navigation. */
-  emergencyRequest?: { id: number; type: EmergencyType; outside?: boolean } | null;
+  emergencyRequest?: { id: number; type: EmergencyType; outside?: boolean; incidentId?: number } | null;
 };
 type Stage = 'choose' | 'instructions' | 'navigation';
 type CalculatedAt = { fix: GpsFix; plan: PreviewPlan; at: number };
@@ -36,9 +45,28 @@ type CalculatedAt = { fix: GpsFix; plan: PreviewPlan; at: number };
 const ON_ROUTE_RECHECK_MS = 10000;
 /** Standing still, the marker ignores moves smaller than this (map units, ~1.2 m). */
 const STILL_DEADBAND = 2.5;
+/** Inside an evacuation area for this many GPS fixes over this long counts as having entered it. */
+const AREA_CONFIRM_FIXES = 2;
+const AREA_CONFIRM_MS = 4000;
+/** After "Not now", ask "Are you safe?" again after this long if still inside. */
+const ASK_AGAIN_MS = 120000;
+
+/** How an evacuation area is named in safety reports (admin dashboard). */
+const reportArea = (area: EvacuationArea): ReportArea => ({ id: area.id, name: `${area.name} · ${area.place}` });
 /** On the route, GPS noise may not pull the marker backwards by less than this (map units, ~6 m);
  * a real turn-back is larger. */
 const BACKTRACK_LIMIT = 12;
+/**
+ * The no-route warning never appears this soon after navigation starts (or after Retry): GPS
+ * needs time to settle and the route needs a few good fixes before it can be calculated.
+ */
+const NO_ROUTE_GRACE_MS = 45000;
+/** "Outside the campus" only when GPS keeps placing you outside for this long and this many fixes. */
+const OUTSIDE_CONFIRM_MS = 20000;
+const OUTSIDE_CONFIRM_FIXES = 8;
+/** "No route" only after this many failed route attempts over this long, with no success between. */
+const ROUTE_FAIL_CONFIRM_MS = 20000;
+const ROUTE_FAIL_CONFIRM_TRIES = 6;
 
 export default function HomeScreen({ emergencyRequest }: Props) {
   const [stage, setStage] = useState<Stage>('choose');
@@ -58,6 +86,23 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   const [gpsRetryKey, setGpsRetryKey] = useState(0);
   const [outsideConfirmed, setOutsideConfirmed] = useState(false);
   const [outsideCampus, setOutsideCampus] = useState(false);
+  // No evacuation route could be found (off campus, or routing kept failing): ask the user.
+  const [noRoute, setNoRoute] = useState(false);
+  // Safety reports: the phone owner's name / ID, "Are you safe?" popup, and a short status toast.
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileSheet, setProfileSheet] = useState<'required' | 'edit' | null>(null);
+  const [safePrompt, setSafePrompt] = useState<{ area: EvacuationArea | null } | null>(null);
+  const safePromptOpen = useRef(false);
+  safePromptOpen.current = Boolean(safePrompt);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
+  // Geofence: the area the user is in (and since when), and the last "Not now".
+  const areaDwell = useRef<{ id: string; since: number; count: number; reported: boolean } | null>(null);
+  const promptDismissed = useRef<{ id: string; at: number } | null>(null);
+  // When navigation (or the last Retry) started, and the running off-campus / failed-route streaks.
+  const noRouteClock = useRef(0);
+  const outsideStreak = useRef<{ since: number; count: number } | null>(null);
+  const routeFails = useRef<{ since: number; count: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   // GPS test panel (long-press the GPS line in the bottom card) and tap-to-calibrate.
   const [gpsTestOpen, setGpsTestOpen] = useState(false);
@@ -71,7 +116,6 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   const { editorOpen } = useModelStore();
   const lastCalculated = useRef<CalculatedAt | null>(null);
   const mostRecentFix = useRef(0);
-  const outsideConsecutive = useRef(0);
   // Walking GPS is smoothed before use; progress along the current route keeps the dot on it.
   const gpsFilter = useRef(new GpsKalmanFilter());
   const routeSegment = useRef(0);
@@ -99,7 +143,8 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     activeFocus.current = null;
     lastCalculated.current = null;
     mostRecentFix.current = 0;
-    outsideConsecutive.current = 0;
+    outsideStreak.current = null;
+    routeFails.current = null;
     gpsFilter.current.reset();
     routeSegment.current = 0;
     markerState.current = { shown: null, onRoute: false, along: 0 };
@@ -118,6 +163,7 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     setLiveEnabled(false);
     setOutsideConfirmed(false);
     setOutsideCampus(false);
+    setNoRoute(false);
     resetRoute();
     setLiveMessage('Waiting for GPS...');
     setEmergencyType(type);
@@ -126,19 +172,47 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   }, [resetRoute]);
 
   const finishInstructions = useCallback(() => {
-    // Only called after two full speech cycles (or explicit voice-error fallback)
-    // AND the user presses the outside-confirmation button.
+    // Called when the user taps "I'm outside now" (available during the whole guide).
     resetRoute();
     setOutsideCampus(false);
+    setNoRoute(false);
     setOutsideConfirmed(true);
+    noRouteClock.current = Date.now();
+    areaDwell.current = null;
+    promptDismissed.current = null;
     setLiveMessage('Requesting your current GPS location...');
     setStage('navigation');
     setLiveEnabled(true);
+    // Tell campus staff this phone is on its way to an evacuation area.
+    startReporting();
   }, [resetRoute]);
+
+  // The phone owner's name and ID: asked once on the first launch, then used for push
+  // registration and safety reports.
+  useEffect(() => {
+    void loadUser().then(saved => {
+      setProfile(saved);
+      if (!saved) setProfileSheet(sheet => sheet ?? 'required');
+      void registerForPush();
+    });
+    // Back in the app (e.g. after allowing notifications in Settings): try registering again.
+    const appState = AppState.addEventListener('change', state => { if (state === 'active') void registerForPush(); });
+    const stopProfile = onProfileChange(setProfile);
+    const stopPush = onPushStatus(setPushStatus);
+    return () => { appState.remove(); stopProfile(); stopPush(); };
+  }, []);
+
+  // The status toast disappears after a few seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Alert link or notification: open the guide, or go straight to the map ("I'm safe outside").
   useEffect(() => {
     if (!emergencyRequest) return;
+    setIncident(emergencyRequest.incidentId);
     selectEmergency(emergencyRequest.type);
     if (emergencyRequest.outside) finishInstructions();
   }, [emergencyRequest?.id, selectEmergency, finishInstructions]);
@@ -152,19 +226,46 @@ export default function HomeScreen({ emergencyRequest }: Props) {
 
   const instruction = useVoiceDirections(plan, stage === 'navigation' && !outsideCampus, voiceMuted);
 
-  const changeEmergency = useCallback(() => {
-    Alert.alert('Change emergency guide?', 'Live GPS navigation will stop. Select Fire or Earthquake again.', [
-      {text:'Keep navigation',style:'cancel'},
-      {text:'Change alert',onPress:() => {
-        setLiveEnabled(false);
-        setOutsideConfirmed(false);
-        setOutsideCampus(false);
-        resetRoute();
-        setStage('choose');
-        setEmergencyType(null);
-      }},
-    ]);
+  /** Stop navigation and the voice, and go back to choosing an alert. */
+  const backToStart = useCallback(() => {
+    void Speech.stop().catch(() => {});
+    setLiveEnabled(false);
+    setOutsideConfirmed(false);
+    setOutsideCampus(false);
+    setNoRoute(false);
+    setSafePrompt(null);
+    areaDwell.current = null;
+    promptDismissed.current = null;
+    resetRoute();
+    setStage('choose');
+    setEmergencyType(null);
   }, [resetRoute]);
+
+  // The I'm safe button asks the same "Are you safe?" question (with the area, if inside one).
+  const markSafe = useCallback(() => {
+    const dwell = areaDwell.current;
+    const area = dwell?.reported ? EVACUATION_AREAS.find(a => a.id === dwell.id) ?? null : null;
+    setSafePrompt({ area });
+  }, []);
+
+  // Confirmed safe: report it to campus staff (retried in the background if offline) and end
+  // navigation right away; the toast says whether it got through.
+  const confirmSafe = useCallback((entered?: Profile) => {
+    if (entered) saveProfile(entered);
+    const area = safePrompt?.area ?? null;
+    backToStart();
+    setToast('Sending your safety confirmation...');
+    void reportStatus('safe_confirmed', area ? reportArea(area) : undefined).then(result => {
+      setToast(result === 'sent' ? 'You are marked safe. Campus staff have been notified.'
+        : result === 'queued' ? 'Saved. It will be sent to campus staff when you are connected.'
+        : 'You are marked safe.');
+    });
+  }, [safePrompt, backToStart]);
+
+  const dismissSafePrompt = useCallback(() => {
+    promptDismissed.current = { id: safePrompt?.area?.id ?? '', at: Date.now() };
+    setSafePrompt(null);
+  }, [safePrompt]);
 
   const retryGps = useCallback(() => {
     // Android will not show the permission dialog again once location is blocked: open Settings.
@@ -176,6 +277,17 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     setLiveMessage('Retrying a fresh GPS fix...');
     setGpsRetryKey(key => key + 1);
   }, [gps.phase, gps.message]);
+
+  // "Retry" on the no-route warning: forget the streaks, give GPS and routing the full grace
+  // period again, and ask for a fresh fix.
+  const retryRoute = useCallback(() => {
+    setNoRoute(false);
+    noRouteClock.current = Date.now();
+    outsideStreak.current = null;
+    routeFails.current = null;
+    setOutsideCampus(false);
+    retryGps();
+  }, [retryGps]);
 
   /**
    * Shows the user marker without jitter: snapped onto the route while following it (with
@@ -284,16 +396,20 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     }
 
     const check = screenOutdoorFix(fix);
+    const now = Date.now();
+    const warnAllowed = now - noRouteClock.current >= NO_ROUTE_GRACE_MS;
     // The barometer learns ground level only from confident outdoor fixes.
     setAtGround(check.code === 'ok');
     if (gpsTestRef.current) setGpsDebug({ raw, smoothed: fix, point: check.point, screen: check.code });
     if (!check.usable || !check.point) {
       if (check.code === 'outside-campus') {
-        outsideConsecutive.current += 1;
-        // GPS drift can briefly put a real campus user outside the approximate
-        // SVG rectangle. Require several consecutive high-quality fixes.
-        if (outsideConsecutive.current >= 3) {
+        const streak = outsideStreak.current ?? (outsideStreak.current = { since: now, count: 0 });
+        streak.count += 1;
+        // GPS drift can put a real campus user outside the approximate campus rectangle for a
+        // while. Require a sustained run of accurate outside fixes.
+        if (streak.count >= OUTSIDE_CONFIRM_FIXES && now - streak.since >= OUTSIDE_CONFIRM_MS) {
           setOutsideCampus(true);
+          if (warnAllowed) setNoRoute(true);
           // The user is confidently outside the mapped region: routing must
           // not be shown as valid or active there.
           setDisplayPlan(null);
@@ -304,7 +420,7 @@ export default function HomeScreen({ emergencyRequest }: Props) {
           activeFocus.current = null;
         }
       } else {
-        outsideConsecutive.current = 0;
+        outsideStreak.current = null;
         setOutsideCampus(false);
       }
       setRouteWarning(Boolean(lastCalculated.current));
@@ -314,11 +430,33 @@ export default function HomeScreen({ emergencyRequest }: Props) {
       return;
     }
 
-    outsideConsecutive.current = 0;
+    outsideStreak.current = null;
     setOutsideCampus(false);
     setRouteWarning(false);
     const point = check.point;
     setGpsAccuracy(fix.accuracy);
+
+    // Geofence: inside an evacuation area for a couple of fixes reports "arrived" and asks
+    // "Are you safe?". After "Not now" it asks again later, or when the user comes back in.
+    const inArea = evacuationAreaAt(point);
+    if (!inArea) {
+      areaDwell.current = null;
+      promptDismissed.current = null;
+    } else {
+      if (areaDwell.current?.id !== inArea.id) areaDwell.current = { id: inArea.id, since: now, count: 0, reported: false };
+      const dwell = areaDwell.current;
+      dwell.count += 1;
+      if (dwell.count >= AREA_CONFIRM_FIXES && now - dwell.since >= AREA_CONFIRM_MS) {
+        if (!dwell.reported) {
+          dwell.reported = true;
+          void reportStatus('arrived', reportArea(inArea));
+        }
+        const dismissed = promptDismissed.current;
+        if (!safePromptOpen.current && (!dismissed || dismissed.id !== inArea.id || now - dismissed.at >= ASK_AGAIN_MS)) {
+          setSafePrompt({ area: inArea });
+        }
+      }
+    }
     const previous = lastCalculated.current;
     const moved = previous ? distanceMeters(previous.fix, fix) : Infinity;
     const elapsedSeconds = previous
@@ -356,11 +494,22 @@ export default function HomeScreen({ emergencyRequest }: Props) {
       emergency: emergencyType,
     });
     if (!result.plan) {
+      // No route and nothing verified to fall back on: keep trying with each fix; only after
+      // repeated failures over a long enough time ask whether they are off campus.
+      if (!previous) {
+        const fails = routeFails.current ?? (routeFails.current = { since: now, count: 0 });
+        fails.count += 1;
+        if (warnAllowed && fails.count >= ROUTE_FAIL_CONFIRM_TRIES && now - fails.since >= ROUTE_FAIL_CONFIRM_MS) setNoRoute(true);
+      }
       setRouteWarning(Boolean(previous));
-      setLiveMessage('Cannot confirm a new safe route. Keeping the last verified route.');
+      setLiveMessage(previous
+        ? 'Cannot confirm a new safe route. Keeping the last verified route.'
+        : 'Still calculating your route. Stay in an open area...');
       return;
     }
+    routeFails.current = null;
     setRouteWarning(false);
+    setNoRoute(false);
     setStart(result.plan.start);
     setStartOnPath(false);
     lastCalculated.current = {fix,plan:result.plan,at:Date.now()};
@@ -426,15 +575,33 @@ export default function HomeScreen({ emergencyRequest }: Props) {
           plan={plan}
           emergencyMode={emergencyType}
           liveStatus={liveMessage}
-          outsideCampus={outsideCampus}
           routeWarning={routeWarning}
-          accuracyM={gpsAccuracy}
           onToggleGpsTest={() => setGpsTestOpen(v => !v)}
-          onChangeEmergency={changeEmergency}
+          onSafe={markSafe}
           onRetryGps={retryGps}
         />
       )}
-      {!editorOpen && stage === 'choose' && <EmergencyChooser onSelect={selectEmergency} />}
+      {!editorOpen && stage === 'navigation' && noRoute && (
+        <NoRouteWarning onRetry={retryRoute} onOutsideCampus={backToStart} />
+      )}
+      {!editorOpen && stage === 'navigation' && safePrompt && (
+        <SafeConfirmPopup area={safePrompt.area} needsProfile={!profile} onSafe={confirmSafe} onNotNow={dismissSafePrompt} />
+      )}
+      {!editorOpen && stage === 'choose' && (
+        <EmergencyChooser onSelect={selectEmergency} profileName={profile?.name ?? null}
+          onEditProfile={() => setProfileSheet('edit')} pushStatus={pushStatus} />
+      )}
+      {/* Never in the way during an emergency: the first-launch form waits for the chooser. */}
+      {profileSheet && (profileSheet === 'edit' || stage === 'choose') && (
+        <ProfileSheet initial={profile} required={profileSheet === 'required'}
+          onSave={entered => { saveProfile(entered); setProfileSheet(null); }}
+          onClose={() => setProfileSheet(null)} />
+      )}
+      {toast && (
+        <View style={toastStyles.toast} pointerEvents="none" accessibilityLiveRegion="polite">
+          <Text style={toastStyles.text}>{toast}</Text>
+        </View>
+      )}
       {!editorOpen && stage === 'instructions' && emergencyType && (
         <EmergencyInstructions
           key={instructionId}
@@ -448,3 +615,11 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     </View>
   );
 }
+
+const toastStyles = StyleSheet.create({
+  toast: {
+    position: 'absolute', top: 76, left: 16, right: 16, zIndex: 140, elevation: 140,
+    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, backgroundColor: '#14532D',
+  },
+  text: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', textAlign: 'center' },
+});

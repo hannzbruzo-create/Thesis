@@ -7,27 +7,37 @@ export function parseEmergencyType(data: Record<string, unknown> | null | undefi
   return value === 'fire' || value === 'earthquake' ? value : null;
 }
 
+/** Animated pictogram shown while a guide step is spoken (see components/ui/GuideVisual). */
+export type GuideVisualKind =
+  | 'drop' | 'cover' | 'hold' | 'stay'
+  | 'walk' | 'stairs' | 'windows' | 'exit-sign' | 'aftershock'
+  | 'run-out' | 'smoke-low' | 'nose' | 'belongings' | 'door' | 'outside';
+
+/** One spoken sentence of the guide, with the short caption and animation that match it. */
+export type GuideStep = {
+  /** Spoken by the voice. */
+  say: string;
+  /** Large on-screen caption (a few words). */
+  caption: string;
+  visual: GuideVisualKind;
+};
+
 /**
- * One step of the voice guide. The guide shows one phase at a time and the voice repeats only
- * that phase until the user moves on; the last phase ends with "I'm outside now" (navigation).
+ * One phase of the voice guide. Its steps are spoken in order, each with its own animation; the
+ * whole phase plays GUIDE_LOOPS times and then the guide moves on to the next phase by itself.
  */
 export type GuidePhase = {
   /** Short label in the progress bar. */
   label: string;
-  /** Big headline on screen. */
+  /** Headline above the caption. */
   title: string;
-  icon: string;
-  /** Spoken one sentence at a time; the sentence being spoken is highlighted on screen. */
-  speech: string[];
-  /** Optional short checklist under the headline. */
-  checklist?: { icon: string; bold: string; text: string }[];
-  /** Small reminder pill under the checklist. */
+  steps: GuideStep[];
+  /** Small reminder pill under the caption. */
   reminder?: string;
-  /** Label of the button that moves to the next phase (absent on the last phase). */
-  next?: string;
-  /** Seconds of silence before the voice repeats this phase. */
-  repeatAfter: number;
 };
+
+/** How many times each phase is played before the guide moves on. */
+export const GUIDE_LOOPS = 2;
 
 /** Spoken and shown when the guide reaches the map (outdoor navigation). */
 export const MAP_STEP_LABEL = 'GO OUTSIDE';
@@ -36,56 +46,41 @@ export const GUIDE_PHASES: Record<EmergencyType, GuidePhase[]> = {
   earthquake: [
     {
       label: 'DURING SHAKING',
-      title: 'Drop, cover,\nhold on',
-      icon: 'shield-alert',
-      speech: [
-        'Earthquake. Drop, cover, and hold on.',
-        'Get under a sturdy table.',
-        'Cover your head and neck.',
-        'Hold on until the shaking stops. Do not run outside.',
+      title: 'Drop, cover, hold on',
+      steps: [
+        { say: 'Earthquake. Drop to your hands and knees.', caption: 'DROP', visual: 'drop' },
+        { say: 'Cover your head and neck under a sturdy table.', caption: 'COVER', visual: 'cover' },
+        { say: 'Hold on to the table until the shaking stops.', caption: 'HOLD ON', visual: 'hold' },
+        { say: 'Do not run outside while it is shaking.', caption: 'Stay put while shaking', visual: 'stay' },
       ],
-      next: 'The shaking has stopped',
-      repeatAfter: 15,
+      reminder: 'Stay away from windows',
     },
     {
       label: 'AFTER SHAKING',
       title: 'Leave the building calmly',
-      icon: 'door-open',
-      speech: [
-        'The shaking has stopped. Leave the building calmly.',
-        'Use the stairs, never the elevator.',
-        'Stay away from windows, walls, and glass.',
-        'Follow the exit signs and campus staff. Be ready for aftershocks.',
-        'When you are outside, tap I am outside now.',
+      steps: [
+        { say: 'When the shaking stops, leave the building calmly.', caption: 'Walk out calmly', visual: 'walk' },
+        { say: 'Use the stairs, never the elevator.', caption: 'Stairs, not elevator', visual: 'stairs' },
+        { say: 'Stay away from windows, walls, and glass.', caption: 'Away from glass', visual: 'windows' },
+        { say: 'Follow the exit signs and campus staff.', caption: 'Follow exit signs', visual: 'exit-sign' },
+        { say: 'Be ready for aftershocks.', caption: 'Expect aftershocks', visual: 'aftershock' },
+        { say: 'Once you are outside, tap I am outside now.', caption: "Outside? Tap I'M OUTSIDE", visual: 'outside' },
       ],
-      checklist: [
-        { icon: 'stairs', bold: 'Use the stairs.', text: 'Never the elevator.' },
-        { icon: 'window-closed-variant', bold: 'Stay away', text: 'from windows, walls and glass.' },
-        { icon: 'account-hard-hat', bold: 'Follow', text: 'exit signs and campus staff.' },
-      ],
-      reminder: 'Be ready for aftershocks',
-      repeatAfter: 20,
     },
   ],
   fire: [
     {
       label: 'GET OUT NOW',
       title: 'Leave the building now',
-      icon: 'fire-alert',
-      speech: [
-        'Fire alarm. Leave the building now.',
-        'Use the stairs, never the elevator.',
-        'If there is smoke, stay low and cover your nose and mouth.',
-        'Do not go back for your belongings.',
-        'When you are outside, tap I am outside now.',
+      steps: [
+        { say: 'Fire alarm. Leave the building now.', caption: 'GET OUT NOW', visual: 'run-out' },
+        { say: 'Use the stairs, never the elevator.', caption: 'Stairs, not elevator', visual: 'stairs' },
+        { say: 'If there is smoke, stay low.', caption: 'Stay low under smoke', visual: 'smoke-low' },
+        { say: 'Cover your nose and mouth.', caption: 'Cover nose and mouth', visual: 'nose' },
+        { say: 'Do not go back for your belongings.', caption: 'Leave your things', visual: 'belongings' },
+        { say: 'Close doors behind you if you can.', caption: 'Close doors behind you', visual: 'door' },
+        { say: 'Once you are outside, tap I am outside now.', caption: "Outside? Tap I'M OUTSIDE", visual: 'outside' },
       ],
-      checklist: [
-        { icon: 'stairs', bold: 'Use the stairs.', text: 'Never the elevator.' },
-        { icon: 'weather-fog', bold: 'Stay low', text: 'under smoke. Cover your nose and mouth.' },
-        { icon: 'bag-personal-off-outline', bold: 'Leave', text: 'your belongings behind.' },
-      ],
-      reminder: 'Close doors behind you if you can',
-      repeatAfter: 15,
     },
   ],
 };
