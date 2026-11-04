@@ -49,9 +49,11 @@ const shape = (poly, holes = []) => ({ poly, holes, box: bbox(poly) });
 const inShape = (x, y, s) => x >= s.box[0] && x <= s.box[2] && y >= s.box[1] && y <= s.box[3] &&
   inPoly(x, y, s.poly) && !s.holes.some(h => inPoly(x, y, h));
 
-// Solid ground-floor buildings are obstacles; covered walkways (canopies) are walkable underneath.
-const solid = model.buildings.filter(b => !b.level && !b.canopy);
-const canopies = model.buildings.filter(b => b.canopy && !b.level);
+// Solid ground-floor buildings are obstacles; covered walkways (canopies) are walkable underneath,
+// and so are open corridors in front of rooms (balcony strips without a ground-floor wall).
+const openCorridor = b => !!b.balcony && !b.balconyGround;
+const solid = model.buildings.filter(b => !b.level && !b.canopy && !openCorridor(b));
+const canopies = model.buildings.filter(b => (b.canopy || openCorridor(b)) && !b.level);
 const buildingShapes = solid.map(b => shape(b.footprint, b.holes ?? []));
 const water = model.areas.filter(a => a.kind === 'water').map(a => shape(a.polygon));
 const noGo = (edits.zones ?? []).filter(z => z.type === 'blocked' || z.type === 'restricted')

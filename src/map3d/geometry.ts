@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
-  buildingBase, buildingHeight, DEFAULT_FLOOR_HEIGHT, DEFAULT_ROOF_PITCH, METRES_PER_UNIT, type CampusBuilding, type CampusEmblem, type FacadeStyle, type XY,
+  buildingBase, buildingHeight, DEFAULT_FLOOR_HEIGHT, DEFAULT_ROOF_PITCH, METRES_PER_UNIT, type CampusBuilding, type CampusEmblem, type CampusRoad, type FacadeStyle, type XY,
 } from './modelTypes';
 import { MAP_CENTER } from './cameraMath';
 
@@ -283,7 +283,7 @@ const FASCIA_M = 0.45, FASCIA_LIP_M = 0.18;
 /** Depth of the shade under the eaves, metres, and how dark it gets. */
 const EAVE_SHADE_M = 0.9, EAVE_SHADE = 0.72;
 /** Width of one repeat of each facade texture, metres (0 = plain wall). */
-const FACADE_BAY_M: Record<FacadeStyle, number> = { windows: 3.2, plain: 0, ust: 3.4, arcade: 3.4, fins: 1.5, grid: 3.4, veranda: 3.4, hall: 4.2, dome: 3.6, balcony: 3.6, angelico: 3.4 };
+const FACADE_BAY_M: Record<FacadeStyle, number> = { windows: 3.2, plain: 0, ust: 3.4, arcade: 3.4, fins: 1.5, grid: 3.4, veranda: 3.4, hall: 4.2, dome: 3.6, balcony: 3.6, angelico: 3.4, vincent: 6, albert: 3.6, glass: 4.2 };
 /** Facade texture coordinate on plain wall (gable ends, fascia, posts): the band above the windows. */
 const PLAIN_UV = [0.5, 0.975];
 
@@ -454,6 +454,8 @@ export type BuildingGeometry = {
   roof: THREE.BufferGeometry;
   outline: THREE.BufferGeometry;
   height: number;
+  /** Tiled top of a plinth (raised floor or corridor), drawn with the floor-tile texture. */
+  floor?: THREE.BufferGeometry | null;
 };
 
 export function buildBuilding(b: CampusBuilding): BuildingGeometry | null {
@@ -472,17 +474,28 @@ export function buildBuilding(b: CampusBuilding): BuildingGeometry | null {
   const wallHoles = holes.map(h => wallRing(h, inset, true));
   const facade = { floor: (b.floorHeight ?? DEFAULT_FLOOR_HEIGHT) / METRES_PER_UNIT, bay: FACADE_BAY_M[b.facade ?? 'windows'] };
   const storey = facade.floor;
-  const wallGeometry = b.groundArcade && !holes.length && height > storey
+  // Without a ground-floor corridor, a plinth raises the walls on a platform the size of the roof outline.
+  const arcade = !!b.groundArcade && !holes.length && height > storey;
+  const lift = arcade ? 0 : (b.plinth ?? 0) / METRES_PER_UNIT;
+  const plinth = lift ? plinthSlab(ring, lift) : null;
+  const wallGeometry = arcade
     ? arcadeWalls(ring, wallOuter, height, storey, b, facade)
-    : mergeAll([walls(wallOuter, height, false, facade), ...wallHoles.map(h => walls(h, height, true, facade))])!;
+    : mergeAll([
+      ...[walls(wallOuter, height - lift, false, facade), ...wallHoles.map(h => walls(h, height - lift, true, facade))].map(g => g.translate(0, lift, 0)),
+      plinth?.sides ?? null,
+    ])!;
+  // The tiled floor: the plinth top, or the raised corridor floor around a ground-floor arcade.
+  const floor = arcade && b.plinth
+    ? plinthSlab(offsetPolygon(ring, PLINTH_LIP_M / METRES_PER_UNIT), b.plinth / METRES_PER_UNIT).top
+    : plinth?.top ?? null;
   const roofRing = b.eave ? offsetPolygon(ring, b.eave / METRES_PER_UNIT) : ring;
   const roofHoles = b.eave ? holes.map(h => offsetPolygon(h, -b.eave! / METRES_PER_UNIT)) : holes;
   const lip = (b.parapet ?? FASCIA_LIP_M) / METRES_PER_UNIT;
   const trim = roofTrim(roofRing, roofHoles, height, lip);
   // A ground-floor corridor gets a red-tile eave over it, below the white ledge.
-  const corridorEave = b.groundArcade && !holes.length && height > storey ? tileEave(wallOuter, storey - LEDGE_M / METRES_PER_UNIT) : null;
+  const corridorEave = arcade ? tileEave(wallOuter, storey - LEDGE_M / METRES_PER_UNIT) : null;
   const finish = (walls: THREE.BufferGeometry, roof: THREE.BufferGeometry, rings: XY[][], roofRings: XY[][], h: number) =>
-    finishBuilding(walls, corridorEave ? mergeAll([roof, corridorEave])! : roof, rings, roofRings, h, lip);
+    ({ ...finishBuilding(walls, corridorEave ? mergeAll([roof, corridorEave])! : roof, rings, roofRings, h, lip), floor });
   const wallRings = [wallOuter, ...wallHoles], roofRings = [roofRing, ...roofHoles];
   // Gable ends share the wall colour and plain facade, so they join the wall mesh.
   const shell = (ends: THREE.BufferGeometry[]) => {
@@ -544,16 +557,21 @@ function balconyStrip(ring: XY[], height: number, b: CampusBuilding): BuildingGe
   // Open edges as two-point "rings": walls() then gives a double-sided strip along each.
   const edges = ring.map((a, i) => [a, ring[(i + 1) % ring.length]] as XY[]).filter((_, i) => kept[i]);
   const parts: (THREE.BufferGeometry | null)[] = [];
-  const floorsGeo: (THREE.BufferGeometry | null)[] = [];
+  // Tiled corridor floors: the raised ground floor (plinth) and every upper storey.
+  const lift = (b.plinth ?? 0) / METRES_PER_UNIT;
+  const plinth = lift ? plinthSlab(ring, lift) : null;
+  if (plinth) parts.push(plinth.sides);
+  const floorsGeo: (THREE.BufferGeometry | null)[] = [plinth?.top ?? null];
   for (let f = b.balconyGround ? 0 : 1; f < floors; f++) {
     const y = f * storey;
     for (const e of edges) {
       if (f) parts.push(fill(fill(walls(e, slab).translate(0, y - slab, 0), 'uv', PLAIN_UV), 'color', white));
-      parts.push(fill(fill(walls(e, wallH).translate(0, y, 0), 'uv', PLAIN_UV), 'color', cream));
+      parts.push(fill(fill(walls(e, wallH).translate(0, f ? y : lift, 0), 'uv', PLAIN_UV), 'color', cream));
     }
     if (!f) continue;
     parts.push(soffit(ring, y - slab, []));
-    floorsGeo.push(flatPolygon(ring, y));
+    const top = flatPolygon(ring, y);
+    if (top) floorsGeo.push(groundUV(top));
   }
   const post = (b.postSize ?? 0.35) / METRES_PER_UNIT, spacing = (b.postSpacing || 3.6) / METRES_PER_UNIT;
   const color = rgb(b.postColor ?? '#F2B01E');
@@ -569,9 +587,7 @@ function balconyStrip(ring: XY[], height: number, b: CampusBuilding): BuildingGe
   }
   const lip = (b.parapet ?? FASCIA_LIP_M) / METRES_PER_UNIT;
   parts.push(roofTrim(ring, [], height, lip));
-  const floorTops = mergeAll(floorsGeo);
-  const roof = mergeAll([flatPolygon(ring, height), floorTops])!;
-  return finishBuilding(mergeAll(parts)!, roof, [ring], [ring], height, lip);
+  return { ...finishBuilding(mergeAll(parts)!, flatPolygon(ring, height)!, [ring], [ring], height, lip), floor: mergeAll(floorsGeo) };
 }
 
 /** Facade texture coordinate on a column (orange on 'arcade', plain wall on the others). */
@@ -615,13 +631,17 @@ function arcadeWalls(ring: XY[], outer: XY[], height: number, storey: number, b:
       parts.push(fill(fill(walls([[x - h, y - h], [x + h, y - h], [x + h, y + h], [x - h, y + h]], storey - ledge - lift).translate(0, lift, 0), 'uv', PLAIN_UV), 'color', color));
     }
   }
-  if (lift) {
-    const edge = offsetPolygon(ring, PLINTH_LIP_M / METRES_PER_UNIT);
-    parts.push(fill(fill(walls(edge, lift), 'uv', PLAIN_UV), 'color', [0.72, 0.71, 0.69]));
-    const top = flatPolygon(edge, lift);
-    if (top) parts.push(fill(fill(top, 'uv', PLAIN_UV), 'color', [0.86, 0.84, 0.8]));
-  }
+  if (lift) parts.push(plinthSlab(offsetPolygon(ring, PLINTH_LIP_M / METRES_PER_UNIT), lift).sides);
   return mergeAll(parts)!;
+}
+
+/**
+ * Raised platform, `lift` map units high: grey concrete sides (joined to the walls) and a top
+ * with map-unit UVs for the floor-tile texture.
+ */
+function plinthSlab(edge: XY[], lift: number) {
+  const top = flatPolygon(edge, lift);
+  return { sides: fill(fill(walls(edge, lift), 'uv', PLAIN_UV), 'color', [0.72, 0.71, 0.69]), top: top ? groundUV(top) : null };
 }
 
 /**
@@ -635,7 +655,13 @@ function canopy(ring: XY[], height: number, roofRing: XY[], b: CampusBuilding): 
   const fascia = (b.parapet ?? (ust ? 0.8 : 0.35)) / METRES_PER_UNIT;
   const post = (b.postSize ?? (ust ? 0.22 : 0.25)) / METRES_PER_UNIT;
   const spacingM = b.postSpacing ?? (ust ? 3.4 : 4);
-  const parts = [walls(roofRing, fascia).translate(0, height - fascia, 0)];
+  const band = walls(roofRing, fascia).translate(0, height - fascia, 0);
+  const parts = [b.fasciaColor ? fill(fill(band, 'uv', PLAIN_UV), 'color', rgb(b.fasciaColor)) : band];
+  // A plinth gives the walk a raised tiled floor; the posts stand on it.
+  const lift = (b.plinth ?? 0) / METRES_PER_UNIT;
+  const plinth = lift ? plinthSlab(ring, lift) : null;
+  if (plinth) parts.push(plinth.sides);
+  const postHeight = height - fascia - lift;
   // Posts sit just inside the outline, at every corner and every few metres between.
   const inner = offsetPolygon(ring, -post);
   for (let i = 0; i < inner.length; i++) {
@@ -644,11 +670,11 @@ function canopy(ring: XY[], height: number, roofRing: XY[], b: CampusBuilding): 
     for (let k = 0; k < n; k++) {
       const x = a[0] + ((c[0] - a[0]) * k) / n, y = a[1] + ((c[1] - a[1]) * k) / n, h = post / 2;
       const square: XY[] = [[x - h, y - h], [x + h, y - h], [x + h, y + h], [x - h, y + h]];
-      if (!b.postColor) { parts.push(fill(walls(square, height - fascia), 'uv', COLUMN_UV)); continue; }
+      if (!b.postColor) { parts.push(fill(walls(square, postHeight).translate(0, lift, 0), 'uv', COLUMN_UV)); continue; }
       // Painted posts: plain texture, colour from vertex colours, darker base band.
-      const baseTop = Math.min(POST_BASE_M / METRES_PER_UNIT, (height - fascia) * 0.4);
-      parts.push(fill(fill(walls(square, baseTop), 'uv', PLAIN_UV), 'color', rgb(b.postBase ?? b.postColor)));
-      parts.push(fill(fill(walls(square, height - fascia - baseTop).translate(0, baseTop, 0), 'uv', PLAIN_UV), 'color', rgb(b.postColor)));
+      const baseTop = Math.min(POST_BASE_M / METRES_PER_UNIT, postHeight * 0.4);
+      parts.push(fill(fill(walls(square, baseTop).translate(0, lift, 0), 'uv', PLAIN_UV), 'color', rgb(b.postBase ?? b.postColor)));
+      parts.push(fill(fill(walls(square, postHeight - baseTop).translate(0, lift + baseTop, 0), 'uv', PLAIN_UV), 'color', rgb(b.postColor)));
     }
   }
   const roofs = [flatPolygon(roofRing, height)];
@@ -663,7 +689,7 @@ function canopy(ring: XY[], height: number, roofRing: XY[], b: CampusBuilding): 
   }
   const outline = new THREE.BufferGeometry();
   outline.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
-  return { walls: mergeAll(parts)!, roof: mergeAll(roofs)!, outline, height };
+  return { walls: mergeAll(parts)!, roof: mergeAll(roofs)!, outline, height, floor: plinth?.top };
 }
 
 /** Narrow tiled skirt sloping out and down from the bottom of a fascia band. */
@@ -691,7 +717,7 @@ function tileEave(outline: XY[], y: number): THREE.BufferGeometry {
 
 function raise(g: BuildingGeometry, base: number): BuildingGeometry {
   if (!base) return g;
-  g.walls.translate(0, base, 0); g.roof.translate(0, base, 0); g.outline.translate(0, base, 0);
+  g.walls.translate(0, base, 0); g.roof.translate(0, base, 0); g.outline.translate(0, base, 0); g.floor?.translate(0, base, 0);
   return { ...g, height: g.height + base };
 }
 
@@ -758,4 +784,90 @@ export function emblemParts(e: CampusEmblem): { geometry: THREE.BufferGeometry; 
     { geometry: place(shield(false), 0.3), color: '#FFFFFF' },
     { geometry: place(shield(true), 0.36), color: '#2B5BA8' },
   ];
+}
+
+/** Road-side curb (painted stripes) and the raised sidewalk behind it, metres. */
+const CURB_W_M = 0.15, SIDEWALK_W_M = 1.2, KERB_H_M = 0.15;
+/** One yellow and one black band of the curb paint, metres. */
+const STRIPE_M = 2;
+
+/**
+ * Box over a 4-corner strip (a→b along the road side, then out to c→d), `h` map units high.
+ * UV u counts stripe lengths along the strip, so a two-colour texture paints alternating bands.
+ */
+function stripBox(a: XY, b: XY, c: XY, d: XY, h: number, stripe: number): THREE.BufferGeometry {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) / stripe;
+  const ring: XY[] = [a, b, c, d], us = [0, len, len, 0];
+  const cx = (a[0] + b[0] + c[0] + d[0]) / 4, cz = (a[1] + b[1] + c[1] + d[1]) / 4;
+  const pos: number[] = [], uv: number[] = [];
+  // Each face is wound so its normal points away from the box centre (or up for the top).
+  const face = (pts: number[][], uvs: number[][]) => {
+    const [p, q, r] = pts;
+    const n = [(q[1] - p[1]) * (r[2] - p[2]) - (q[2] - p[2]) * (r[1] - p[1]), (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]), (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])];
+    const mid = pts.reduce((s, v) => [s[0] + v[0] / pts.length, s[1] + v[1] / pts.length, s[2] + v[2] / pts.length], [0, 0, 0]);
+    const out = [mid[0] - wx(cx), mid[1] - h / 2, mid[2] - wz(cz)];
+    const flip = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0;
+    for (const k of flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]) { pos.push(...pts[k]); uv.push(...uvs[k]); }
+  };
+  face(ring.map(p => [wx(p[0]), h, wz(p[1])]), us.map((u, i) => [u, i < 2 ? 0 : 1]));
+  for (let i = 0; i < 4; i++) {
+    const p = ring[i], q = ring[(i + 1) % 4];
+    face([[wx(p[0]), 0, wz(p[1])], [wx(q[0]), 0, wz(q[1])], [wx(q[0]), h, wz(q[1])], [wx(p[0]), h, wz(p[1])]],
+      [[us[i], 0], [us[(i + 1) % 4], 0], [us[(i + 1) % 4], 1], [us[i], 1]]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
+}
+
+function segmentDistance(p: XY, a: XY, b: XY) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy;
+  const t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l)) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+}
+
+/**
+ * Striped curbs and raised sidewalks along both sides of every road. A side breaks where another
+ * road (with its own sidewalk) crosses or joins, and where it would run into a solid building.
+ */
+export function roadSides(roads: CampusRoad[], buildings: CampusBuilding[]) {
+  const curbW = CURB_W_M / METRES_PER_UNIT, walkW = SIDEWALK_W_M / METRES_PER_UNIT, h = KERB_H_M / METRES_PER_UNIT;
+  const clear = curbW + walkW + 0.5;
+  const solid = buildings.filter(b => !b.level && !b.canopy).map(b => b.footprint);
+  const curbs: THREE.BufferGeometry[] = [], walks: THREE.BufferGeometry[] = [];
+  for (const road of roads) {
+    for (let s = 1; s < road.points.length; s++) {
+      const a = road.points[s - 1], b = road.points[s];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!len) continue;
+      const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+      for (const side of [1, -1]) {
+        const nx = -uy * side, ny = ux * side, edge = road.width / 2;
+        const at = (t: number, off: number): XY => [a[0] + ux * t + nx * off, a[1] + uy * t + ny * off];
+        const open = (t: number) => {
+          const mid = at(t, edge + clear / 2);
+          if (roads.some(o => o !== road && o.points.some((p, i) => i > 0 && segmentDistance(mid, o.points[i - 1], p) < o.width / 2 + clear))) return false;
+          return !solid.some(f => pointInPolygon(mid[0], mid[1], f));
+        };
+        // Sample along the side and keep the open runs.
+        const step = 0.5;
+        let start: number | null = null;
+        for (let t = 0; t <= len + step / 2; t += step) {
+          const tt = Math.min(t, len), ok = open(tt);
+          if (ok && start === null) start = tt;
+          if ((!ok || tt >= len) && start !== null) {
+            const end = ok ? tt : tt - step;
+            if (end - start > 1) {
+              curbs.push(stripBox(at(start, edge), at(end, edge), at(end, edge + curbW), at(start, edge + curbW), h * 1.05, STRIPE_M / METRES_PER_UNIT));
+              walks.push(stripBox(at(start, edge + curbW), at(end, edge + curbW), at(end, edge + curbW + walkW), at(start, edge + curbW + walkW), h, 1));
+            }
+            start = null;
+          }
+        }
+      }
+    }
+  }
+  return { curbs: mergeAll(curbs), sidewalks: mergeAll(walks) };
 }

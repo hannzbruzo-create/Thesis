@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { CampusModel, XY } from '../modelTypes';
-import { courtMarkings, dashedLine, flatPolygon, mergeAll, parkingStripes, ribbon } from '../geometry';
+import { courtMarkings, dashedLine, flatPolygon, mergeAll, parkingStripes, ribbon, roadSides } from '../geometry';
 import { MAP_CENTER } from '../cameraMath';
 import { groundTextures } from './textures';
 
@@ -41,8 +41,11 @@ const closed = (p: XY[]) => [...p, p[0]];
 /** Trunk height below the crown, map units (~2 m). */
 const TREE_TRUNK = 2 / 0.48;
 
+/** Raised sidewalks beside the roads (concrete). */
+const SIDEWALK = '#D2CFC8';
+
 export default function Ground({ model }: { model: CampusModel }) {
-  const { theme, areas, roads, walkways, trees } = model;
+  const { theme, areas, roads, walkways, trees, buildings } = model;
   const tex = groundTextures();
 
   const groundPlane = useDisposable(() => flatPolygon([[-2600, -2600], [3400, -2600], [3400, 3400], [-2600, 3400]], -0.05), []);
@@ -67,6 +70,8 @@ export default function Ground({ model }: { model: CampusModel }) {
   const roadCurbs = useDisposable(() => mergeAll(roads.map(r => ribbon(r.points, r.width + 1.7, 0.05))), [roads]);
   const roadSurface = useDisposable(() => mergeAll(roads.map(r => ribbon(r.points, r.width, 0.06))), [roads]);
   const roadLines = useDisposable(() => mergeAll(roads.filter(r => r.width >= 8).map(r => dashedLine(r.points, 0.45, 0.07))), [roads]);
+  const sides = useMemo(() => roadSides(roads, buildings), [roads, buildings]);
+  useEffect(() => () => { sides.curbs?.dispose(); sides.sidewalks?.dispose(); }, [sides]);
 
   const treeGeometry = useDisposable(() => new THREE.IcosahedronGeometry(1, 1), []);
   const trunkGeometry = useDisposable(() => new THREE.CylinderGeometry(0.5, 0.65, 1, 6).translate(0, 0.5, 0), []);
@@ -112,6 +117,9 @@ export default function Ground({ model }: { model: CampusModel }) {
       <FlatLayer geometry={roadCurbs} color={theme.curb} order={LAYER.curb} />
       <FlatLayer geometry={roadSurface} color={theme.road} order={LAYER.road} map={tex.asphalt} />
       <FlatLayer geometry={roadLines} color={theme.roadLine} order={LAYER.roadLine} opacity={0.95} />
+      {/* Solid, raised road sides: striped curb and the sidewalk behind it. */}
+      {sides.curbs && <mesh geometry={sides.curbs}><meshLambertMaterial map={tex.kerb} /></mesh>}
+      {sides.sidewalks && <mesh geometry={sides.sidewalks}><meshLambertMaterial color={SIDEWALK} map={tex.asphalt} /></mesh>}
       {treeMesh && <primitive object={treeMesh} />}
     </group>
   );

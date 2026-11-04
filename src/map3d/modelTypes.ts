@@ -11,9 +11,12 @@ export type RoofStyle = 'flat' | 'gable' | 'hip' | 'pyramid';
  * 'hall' white walls, paired yellow pilasters and wide black-framed curtained windows (Daragang Magayon Hall);
  * 'dome' tan walls, yellow pilasters and a band of dark windows (AQ Dome upper floor);
  * 'balcony' cream room walls with a window and a door per bay, the wall behind an open corridor (St. Albert, St. John Macias);
- * 'angelico' cream walls, light-blue windows and yellow-orange pilasters (Fra. Angelico).
+ * 'angelico' cream walls, light-blue windows and yellow-orange pilasters (Fra. Angelico);
+ * 'vincent' one tall storey: dark glass with yellow posts, a grey band, amber/white panels and a weathered cream top (St. Vincent Ferrer hall);
+ * 'albert' cream walls, a dark window per bay and yellow pillars at the bay edges (St. Albert outer walls);
+ * 'glass' a dark glass wall on a beige base band with yellow pillars (St. Thomas Chapel).
  */
-export type FacadeStyle = 'windows' | 'plain' | 'ust' | 'arcade' | 'fins' | 'grid' | 'veranda' | 'hall' | 'dome' | 'balcony' | 'angelico';
+export type FacadeStyle = 'windows' | 'plain' | 'ust' | 'arcade' | 'fins' | 'grid' | 'veranda' | 'hall' | 'dome' | 'balcony' | 'angelico' | 'vincent' | 'albert' | 'glass';
 
 export type CampusBuilding = {
   id: string;
@@ -49,7 +52,10 @@ export type CampusBuilding = {
    * (postColor / postSize / postSpacing). Needs 2+ floors and no courtyards.
    */
   groundArcade?: number;
-  /** With groundArcade: the corridor floor is raised this many metres on a platform. */
+  /**
+   * Raised floor, metres: with groundArcade the corridor floor sits on a platform; otherwise the
+   * whole building stands on a platform the size of its footprint (wall height includes it).
+   */
   plinth?: number;
   /**
    * Open corridor strip in front of rooms, on every floor, opening to this side: floor slabs with a
@@ -62,6 +68,8 @@ export type CampusBuilding = {
   /** Canopies: post colour, and a different colour for the bottom 0.9 m (a painted base). */
   postColor?: string;
   postBase?: string;
+  /** Canopies: colour of the roof-edge band, so it can differ from white posts/wallColor. */
+  fasciaColor?: string;
   /** Wall look (see FacadeStyle). Default 'windows'. */
   facade?: FacadeStyle;
   /** How far the white roof-edge band rises above the roof, metres (a parapet). Default 0.18. */
@@ -75,7 +83,10 @@ export type CampusBuilding = {
 export type CampusEmblem = { id: string; x: number; y: number; height: number; radius: number; facing: number };
 
 /** A name on the map. Rooms carry the floor they are on: 0 = ground floor (default), 1 = 2F, ... */
-export type CampusLabel = { id: string; name: string; x: number; y: number; floor?: number };
+/** Kind of a key place inside a building (school office, faculty room, clinic); sets its label icon. */
+export type PlaceKind = 'office' | 'faculty' | 'clinic';
+/** `place` marks a key place inside a building rather than a building name. */
+export type CampusLabel = { id: string; name: string; x: number; y: number; floor?: number; place?: PlaceKind };
 export type GroundArea = { id: string; kind: 'grass' | 'field' | 'dirt' | 'court' | 'water' | 'plaza' | 'parking'; polygon: XY[] };
 export type CampusRoad = { id: string; width: number; points: XY[] };
 export type CampusWalkway = {

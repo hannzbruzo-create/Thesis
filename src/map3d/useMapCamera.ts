@@ -281,10 +281,11 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
     camera.distance.value = withTiming(clamp(camera.distance.value / factor, MIN_DISTANCE, maxDistance.value), EASE);
   }, []);
 
-  const setMode = useCallback((threeD: boolean) => {
+  const setMode = useCallback((threeD: boolean, animate = true, tilt = PITCH_3D) => {
     is3D.value = threeD;
     setMode3D(threeD);
-    camera.pitch.value = withTiming(threeD ? PITCH_3D : 0, { duration: 700, easing: Easing.inOut(Easing.cubic) });
+    const pitch = threeD ? tilt : 0;
+    camera.pitch.value = animate ? withTiming(pitch, { duration: 700, easing: Easing.inOut(Easing.cubic) }) : pitch;
   }, []);
 
   /**
@@ -293,12 +294,18 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
    * at the current pitch, and the target is shifted so the box sits in the middle of the free area.
    */
   const fitBounds = useCallback((box: MapBounds, insets: ScreenInsets = { top: 0, bottom: 0 },
-    opts: { animate?: boolean; padding?: number; resetBearing?: boolean; done?: () => void } = {}) => {
+    opts: {
+      animate?: boolean; padding?: number; resetBearing?: boolean; bearing?: number; intro?: boolean;
+      /** Fit only the box's depth (top to bottom of the screen) and let its sides run off a narrow screen. */
+      fillHeight?: boolean; done?: () => void;
+    } = {}) => {
     const w = camera.width.value, h = camera.height.value;
     if (!w || !h) return;
-    const { animate = true, padding = 0.12, resetBearing = true, done } = opts;
+    const { animate = true, padding = 0.12, resetBearing = true, intro = false, fillHeight = false, done } = opts;
     stopMotion();
-    const bearing = resetBearing ? nearestAngle(camera.bearing.value, 0) : camera.bearing.value;
+    // `bearing` (radians, 0 = north up) turns the map to face that way; otherwise north up or as is.
+    const bearing = opts.bearing != null ? nearestAngle(camera.bearing.value, opts.bearing)
+      : resetBearing ? nearestAngle(camera.bearing.value, 0) : camera.bearing.value;
     const pitch = (camera.pitch.value * Math.PI) / 180;
     const tanHalf = Math.tan((FOV_DEGREES * Math.PI) / 360);
     const free = Math.max(140, h - insets.top - insets.bottom);
@@ -309,7 +316,7 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
     const foreshorten = 0.45 + 0.55 * Math.cos(pitch);
     const dDepth = (depth * foreshorten / 2) / tanHalf * (h / free);
     const dAcross = (across / 2) / tanHalf * (h / w);
-    const distance = clamp(Math.max(dDepth, dAcross), MIN_DISTANCE, maxDistance.value);
+    const distance = clamp(fillHeight ? dDepth : Math.max(dDepth, dAcross), MIN_DISTANCE, maxDistance.value);
     // Move the target toward the bottom of the screen by half the inset difference, so the box
     // appears centred in the free area (screen-down in map units is (-sin b, cos b)).
     const worldPerPx = (2 * distance * tanHalf) / h / foreshorten;
@@ -321,7 +328,13 @@ export default function useMapCamera({ onTap, onUserMove, onFirstLayout }: Optio
       done?.();
       return;
     }
-    const ease = { duration: 900, easing: Easing.inOut(Easing.cubic) };
+    if (intro) {
+      // Opening shot: start a little further out and turned, then glide in to the framed view.
+      camera.targetX.value = tx; camera.targetY.value = ty;
+      camera.distance.value = Math.min(maxDistance.value, distance * 1.35);
+      camera.bearing.value = bearing + 0.35;
+    }
+    const ease = { duration: intro ? 1600 : 900, easing: Easing.inOut(Easing.cubic) };
     camera.targetX.value = withTiming(tx, ease, finished => { if (finished && done) runOnJS(done)(); });
     camera.targetY.value = withTiming(ty, ease);
     camera.distance.value = withTiming(distance, ease);
