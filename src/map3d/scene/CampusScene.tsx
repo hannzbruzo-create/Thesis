@@ -1,6 +1,7 @@
 import React from 'react';
 import * as THREE from 'three';
-import { Canvas, useFrame } from '@react-three/fiber/native';
+import { Canvas, invalidate, useFrame } from '@react-three/fiber/native';
+import { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 import type { CampusModel } from '../modelTypes';
 import type { PreviewPlan } from '../../navigation/routePreview';
 import type { Point } from '../../navigation/walkableGraph';
@@ -55,12 +56,26 @@ type Props = {
   animateRoute: boolean;
 };
 
+/** Asks for a new frame whenever the camera moves (the scene only redraws on demand). */
+function useRedrawOnCameraMove(camera: CameraValues) {
+  useAnimatedReaction(
+    () => [camera.targetX.value, camera.targetY.value, camera.distance.value, camera.bearing.value, camera.pitch.value, camera.width.value, camera.height.value],
+    (now, before) => {
+      if (!before || now.some((v, i) => v !== before[i])) runOnJS(invalidate)();
+    },
+  );
+}
+
 export default function CampusScene({ model, camera, selectedId, plan, marker, heading, accuracyM = null, animateRoute }: Props) {
+  useRedrawOnCameraMove(camera);
+  // Idle maps draw nothing; the route and markers pulse, so they keep drawing every frame.
+  const animating = !!plan || !!marker;
   return (
     <Canvas
       camera={{ fov: FOV_DEGREES, near: 1, far: 6000, position: [0, 1000, 0] }}
       style={{ flex: 1 }}
       pointerEvents="none"
+      frameloop={animating ? 'always' : 'demand'}
     >
       <color attach="background" args={[model.theme.sky]} />
       <fog attach="fog" args={[model.theme.sky, 1600, 4200]} />

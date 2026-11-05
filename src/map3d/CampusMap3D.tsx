@@ -42,6 +42,18 @@ function polygonArea(poly: [number, number][]) {
 
 /** Part of the campus (each way, around its middle) framed when navigation starts, before a route. */
 const NAV_START_SPAN = 0.55;
+/** Views face west, as if standing at Gate 3 on the highway looking in (radians, 0 = north up). */
+const GATE3_BEARING = -Math.PI / 2;
+/** Tilt of the opening overview, degrees: gentle enough that the campus fills a portrait screen. */
+const OVERVIEW_PITCH = 40;
+/** How the campus overview is framed: from Gate 3, filling the screen top to bottom. */
+const OVERVIEW = { padding: 0.04, bearing: GATE3_BEARING, fillHeight: true } as const;
+/**
+ * Where the map starts (and returns to without GPS): standing at Gate 3, looking in. The box runs
+ * from the gate (bottom of the screen) west past ST. Dominic and ST. Thomas Aquinas.
+ */
+const GATE3_VIEW_BOX = { minX: 585, minY: 418, maxX: 752, maxY: 545 };
+const GATE3_VIEW = { padding: 0.05, bearing: GATE3_BEARING, fillHeight: true } as const;
 
 /** The 2D / 3D campus map. Drop-in replacement for components/map/CampusMap. */
 export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSettled, plan, liveGps = false, animateRoute = false,
@@ -81,10 +93,12 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
   const insetsRef = React.useRef(insets);
   insetsRef.current = insets;
   const cameraRef = React.useRef<ReturnType<typeof useMapCamera> | null>(null);
-  // Opening view: the whole campus, tilted, framed between the header and the bottom card.
+  // Opening view: in 3D, standing at Gate 3 looking into the campus, framed between the header
+  // and the bottom card, with a short glide in.
   const openingView = useCallback(() => {
-    cameraRef.current?.fitBounds(campusBounds, insetsRef.current, { animate: false, padding: 0.04 });
-  }, [campusBounds]);
+    cameraRef.current?.setMode(true, false, OVERVIEW_PITCH);
+    cameraRef.current?.fitBounds(GATE3_VIEW_BOX, insetsRef.current, { ...GATE3_VIEW, intro: true });
+  }, []);
   const cam = useMapCamera({ onTap, onUserMove: stopFollowing, onFirstLayout: openingView });
   cameraRef.current = cam;
 
@@ -108,7 +122,7 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
 
   // Navigation started: until a route frames the camera, tilt into 3D and close in on the middle
   // of the campus (the guide left the map zoomed far out above its tall sheet).
-  // Navigation ended (emergency changed or reset): back to the flat overview.
+  // Navigation ended (emergency changed or reset): back to the opening view at Gate 3.
   useEffect(() => {
     if (liveGps) {
       if (focusRequest) return;
@@ -119,7 +133,9 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
       return;
     }
     setFollowing(false);
-    if (cam.mode3D) { cam.setMode(false); cam.fitBounds(campusBounds, insets, { padding: 0.04 }); }
+    // Back to the opening view: 3D, standing at Gate 3.
+    cam.setMode(true, true, OVERVIEW_PITCH);
+    cam.fitBounds(GATE3_VIEW_BOX, insets, GATE3_VIEW);
   }, [liveGps]);
   // Follow mode: position and heading are separate, so compass updates (many per second) do not
   // restart the position glide, and small compass wobble does not turn the map.
@@ -135,10 +151,10 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
   }, [following]);
 
   useEffect(() => { if (!editorOpen) setShapeMode(false); }, [editorOpen]);
-  // When the bottom panel changes size (emergency guide opens or closes), frame the campus in
+  // When the bottom panel changes size (emergency guide opens or closes), frame the Gate 3 view in
   // the space that is left, unless live navigation is controlling the camera.
   useEffect(() => {
-    if (!liveGps) cam.fitBounds(campusBounds, insets, { padding: 0.04 });
+    if (!liveGps) cam.fitBounds(GATE3_VIEW_BOX, insets, GATE3_VIEW);
   }, [insets.bottom]);
   const selected = model.buildings.find(b => b.id === selectedId) ?? null;
   const toggleShapeMode = useCallback((on: boolean) => {
@@ -165,7 +181,7 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
 
   const recenter = () => {
     if (liveGps && startPoint) cam.focusOnPoint(startPoint);
-    else cam.fitBounds(campusBounds, insets, { padding: 0.04 });
+    else cam.fitBounds(GATE3_VIEW_BOX, insets, GATE3_VIEW);
   };
 
   return (
@@ -196,7 +212,7 @@ export default function CampusMap3D({ start, startPoint, focusRequest, onFocusSe
         onZoomOut={cam.zoomOut}
         onToggleMode={() => cam.setMode(!cam.mode3D)}
         onRecenter={recenter}
-        onFit={() => cam.fitBounds(campusBounds, insets, { padding: 0.04 })}
+        onFit={() => cam.fitBounds(campusBounds, insets, OVERVIEW)}
         hasLiveLocation={Boolean(liveGps && startPoint)}
         following={following}
         onToggleFollow={() => setFollowing(f => !f)}

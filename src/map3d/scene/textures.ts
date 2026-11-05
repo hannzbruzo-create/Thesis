@@ -178,6 +178,28 @@ const paintBalcony = (u: number, v: number): RGB => {
   return windowAt(u, v, 0.14, 0.5, 0.34, 0.76, 2, [0.3, 0.33, 0.37], [0.85, 0.85, 0.85]) ?? CREAM;
 };
 
+const BEIGE = hex('#E2C9A2');
+
+/** St. Thomas Chapel: a glass wall of dark panes on a beige base band, a yellow pillar at each bay edge. */
+const paintGlass = (u: number, v: number): RGB => {
+  // The very top is what the roof's eave band and other plain parts sample: keep it white.
+  if (v > 0.96) return WHITE;
+  if (u < 0.05 || u > 0.95) return u < 0.015 || u > 0.985 ? [YELLOW[0] * 0.82, YELLOW[1] * 0.82, YELLOW[2] * 0.82] : YELLOW;
+  if (v < 0.14) return v < 0.02 ? [BEIGE[0] * 0.85, BEIGE[1] * 0.85, BEIGE[2] * 0.85] : BEIGE;
+  // Three panes across, a transom near the top; a soft reflection brightens the upper glass.
+  const pu = (u - 0.05) / 0.9 * 3;
+  if (Math.min(pu % 1, 1 - (pu % 1)) < 0.03 || Math.abs(v - 0.74) < 0.012 || v > 0.985) return [0.32, 0.32, 0.34];
+  const shine = Math.max(0, v - 0.5) * 0.18;
+  return [0.16 + shine, 0.18 + shine, 0.21 + shine];
+};
+
+/** St. Albert outer walls: cream wall, a dark window per bay, and a yellow pillar at each bay edge. */
+const paintAlbert = (u: number, v: number): RGB => {
+  if (u < 0.07 || u > 0.93) return u < 0.02 || u > 0.98 ? [YELLOW[0] * 0.82, YELLOW[1] * 0.82, YELLOW[2] * 0.82] : YELLOW;
+  if (v < 0.04 || v > 0.94) return [0.96, 0.95, 0.93];
+  return windowAt(u, v, 0.24, 0.76, 0.34, 0.78, 2, [0.3, 0.33, 0.37], [0.85, 0.85, 0.85]) ?? CREAM;
+};
+
 const AMBER = hex('#E9A23B');
 
 /** Fra. Angelico: cream wall, a white-framed light-blue window, yellow-orange pilasters. */
@@ -188,6 +210,34 @@ const paintAngelico = (u: number, v: number): RGB => {
   return windowAt(u, v, 0.26, 0.74, 0.38, 0.78, 2, [0.62, 0.76, 0.86], WHITE) ?? CREAM;
 };
 
+const CHARCOAL: RGB = [0.37, 0.38, 0.4], LOUVRE = hex('#E0A63C');
+
+/**
+ * St. Vincent Ferrer covered hall, one tall storey per texture: dark glass on the ground with a
+ * yellow post at the bay edge, a charcoal band (the overhang), a grid of amber louvred and white
+ * panels, and a weathered cream wall up to the parapet.
+ */
+const paintVincent = (u: number, v: number): RGB => {
+  if (v < 0.03) return [0.4, 0.4, 0.41];
+  if (v < 0.4) {
+    if (u < 0.025 || u > 0.975) return u > 0.99 ? [YELLOW[0] * 0.8, YELLOW[1] * 0.8, YELLOW[2] * 0.8] : YELLOW;
+    return windowAt(u, v, 0.04, 0.96, 0.03, 0.98, 4, [0.22, 0.23, 0.26], [0.18, 0.18, 0.19]) ?? CHARCOAL;
+  }
+  if (v < 0.5) return v < 0.415 ? [0.3, 0.31, 0.33] : CHARCOAL;
+  if (v < 0.8) {
+    // 4 x 3 panels in a dark frame; louvred amber or white, in an irregular pattern like the photo.
+    const fu = (u * 4) % 1, fv = ((v - 0.5) / 0.3 * 3) % 1;
+    if (Math.min(fu, 1 - fu) < 0.035 || Math.min(fv, 1 - fv) < 0.06) return CHARCOAL;
+    const cell = Math.floor(u * 4) * 5 + Math.floor((v - 0.5) / 0.3 * 3) * 3;
+    if (cell % 7 === 1 || cell % 7 === 4) return [0.95, 0.95, 0.94];
+    const slat = ((v - 0.5) / 0.3 * 3 * 7) % 1 < 0.3 ? 0.84 : 1;
+    return [LOUVRE[0] * slat, LOUVRE[1] * slat, LOUVRE[2] * slat];
+  }
+  // Rain streaks running down from the parapet.
+  const streak = 0.9 + 0.1 * Math.abs(Math.sin(u * 23.7) * Math.sin(u * 9.1 + 1.3));
+  return [0.95 * streak, 0.93 * streak, 0.88 * streak];
+};
+
 /** Fin tower: taupe piers with a wide recessed slot, dark at its edges and lit orange inside. */
 const paintFins = (u: number, v: number): RGB => {
   if (u < 0.22 || u > 0.78 || v > 0.955) return u > 0.78 && u < 0.86 ? [TAUPE[0] * 0.78, TAUPE[1] * 0.78, TAUPE[2] * 0.78] : TAUPE;
@@ -196,12 +246,34 @@ const paintFins = (u: number, v: number): RGB => {
   return [ORANGE[0] * (0.55 + glow * 0.4), ORANGE[1] * (0.5 + glow * 0.4), ORANGE[2] * (0.5 + glow * 0.4)];
 };
 
+const TERRACOTTA = hex('#B8968A'), TERRACOTTA_DARK = hex('#9C6858'), GROUT = hex('#CDBBB1');
+
+/**
+ * Corridor floor (photo of the Aquinas veranda): dusty-rose terracotta tiles in a 4 x 4 block,
+ * light grout, each tile a touch lighter or darker, and a darker red-brown row and column.
+ */
+const paintTile = (u: number, v: number): RGB => {
+  const fu = u * 4, fv = v * 4;
+  if (Math.min(fu % 1, 1 - (fu % 1)) < 0.03 || Math.min(fv % 1, 1 - (fv % 1)) < 0.03) return GROUT;
+  const col = Math.floor(fu), row = Math.floor(fv);
+  const base = col === 0 || row === 0 ? TERRACOTTA_DARK : TERRACOTTA;
+  const k = 0.95 + ((col * 7 + row * 13) % 5) * 0.025;
+  return [base[0] * k, base[1] * k, base[2] * k];
+};
+
 let cache: ReturnType<typeof build> | null = null;
 
 function build() {
   const blotch = valueNoise(6, 11), fine = valueNoise(24, 23);
   const stripes = valueNoise(10, 31);
+  // 4 tiles of ~0.6 m per repeat: 5 map units.
+  const tile = facadeTexture(89, paintTile);
+  tile.repeat.set(1 / 5, 1 / 5);
   return {
+    /** Road curbs: a yellow band then a black band per repeat (UV u counts repeats along the curb). */
+    kerb: facadeTexture(91, u => (u < 0.5 ? [0.95, 0.76, 0.2] : [0.16, 0.16, 0.17])),
+    /** Raised corridor and platform floors (plinth tops). */
+    tile,
     /** Lawn: soft patches plus a fine grain. Tile = 90 map units. */
     grass: makeTexture((u, v, g) => 0.9 + blotch(u, v) * 0.09 + fine(u, v) * 0.04 + (g - 0.5) * 0.03, 1 / 90),
     /** Playing field: mowing stripes. Tile = 64 map units (4 stripes). */
@@ -225,6 +297,9 @@ function build() {
       dome: facadeTexture(71, paintDome),
       balcony: facadeTexture(73, paintBalcony),
       angelico: facadeTexture(79, paintAngelico),
+      vincent: facadeTexture(83, paintVincent),
+      albert: facadeTexture(97, paintAlbert),
+      glass: facadeTexture(101, paintGlass),
     },
   };
 }
