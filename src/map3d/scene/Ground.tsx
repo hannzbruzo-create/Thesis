@@ -6,13 +6,16 @@ import { MAP_CENTER } from '../cameraMath';
 import { groundTextures } from './textures';
 
 /**
- * Flat ground layers. They are drawn in a fixed order (renderOrder) without
- * writing depth, so overlapping shapes never flicker; buildings draw after.
+ * Draw order, lowest first. Flat ground layers are drawn without writing depth, so overlapping
+ * shapes never flicker. `raised` is for the low solid surfaces people walk on (raised sidewalks,
+ * curbs, tiled ground-level floors): they write depth like any solid, but are drawn before the
+ * route. The route then draws on top of everything below it without a depth test, and everything
+ * after it (walls, roofs, canopies, trees, at the default order 0) still hides it where it is in front.
  */
 export const LAYER = {
   ground: -40, lawn: -39, field: -38, area: -36, parkingLine: -35, walkway: -34,
   apron: -33, contact: -32, roadEdge: -31, curb: -30, road: -29, roadLine: -28,
-  routeCasing: -14, route: -13,
+  raised: -20, routeCasing: -14, route: -13,
 } as const;
 
 function useDisposable<T extends THREE.BufferGeometry | null>(factory: () => T, deps: unknown[]): T {
@@ -118,8 +121,8 @@ export default function Ground({ model }: { model: CampusModel }) {
       <FlatLayer geometry={roadSurface} color={theme.road} order={LAYER.road} map={tex.asphalt} />
       <FlatLayer geometry={roadLines} color={theme.roadLine} order={LAYER.roadLine} opacity={0.95} />
       {/* Solid, raised road sides: striped curb and the sidewalk behind it. */}
-      {sides.curbs && <mesh geometry={sides.curbs}><meshLambertMaterial map={tex.kerb} /></mesh>}
-      {sides.sidewalks && <mesh geometry={sides.sidewalks}><meshLambertMaterial color={SIDEWALK} map={tex.asphalt} /></mesh>}
+      {sides.curbs && <mesh geometry={sides.curbs} renderOrder={LAYER.raised}><meshLambertMaterial map={tex.kerb} /></mesh>}
+      {sides.sidewalks && <mesh geometry={sides.sidewalks} renderOrder={LAYER.raised}><meshLambertMaterial color={SIDEWALK} map={tex.asphalt} /></mesh>}
       {treeMesh && <primitive object={treeMesh} />}
     </group>
   );

@@ -13,6 +13,10 @@ type Props = {
   /** The user is safe: stop navigation and go back to the alert chooser. */
   onSafe: () => void;
   onRetryGps: () => void;
+  /** Square button beside "I'm safe" once there is a route: fresh GPS fix and a recalculated route. */
+  onRefresh?: () => void;
+  /** A refresh is in progress: the button shows a spinner. */
+  refreshing?: boolean;
   /** Long-press the card to open the GPS test panel (field testing). */
   onToggleGpsTest?: () => void;
 };
@@ -36,11 +40,11 @@ const TIPS: Record<EmergencyType, { walking: string; arrived: string }> = {
 /**
  * Bottom card for live navigation, in one of three states: finding your location, walking to the
  * evacuation area, and arrived. "I'm safe" at the bottom ends navigation at any time, next to
- * "Retry GPS" while there is no fix yet. (No route / outside the campus is a separate warning,
+ * "Retry GPS" while there is no fix yet, or a small refresh button once there is a route. (No route / outside the campus is a separate warning,
  * see NoRouteWarning.)
  */
 export default function NavigationPanel({ plan, emergencyMode, liveStatus, routeWarning = false,
-  onSafe, onRetryGps, onToggleGpsTest }: Props) {
+  onSafe, onRetryGps, onRefresh, refreshing = false, onToggleGpsTest }: Props) {
   const remaining = plan ? routeLengthMetres(plan.route) : null;
   const arrived = remaining != null && remaining <= ARRIVED_METRES;
 
@@ -90,6 +94,14 @@ export default function NavigationPanel({ plan, emergencyMode, liveStatus, route
           <Pressable style={[s.action, s.retry]} onPress={onRetryGps} accessibilityRole="button">
             <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
             <Text style={s.actionText}>Retry GPS</Text>
+          </Pressable>
+        )}
+        {plan && onRefresh && (
+          <Pressable style={s.refresh} onPress={onRefresh} disabled={refreshing} accessibilityRole="button"
+            accessibilityLabel="Refresh my location and route" accessibilityState={{ busy: refreshing }}>
+            {refreshing
+              ? <ActivityIndicator size="small" color="#2563EB" />
+              : <MaterialCommunityIcons name="refresh" size={22} color="#2563EB" />}
           </Pressable>
         )}
         <Pressable style={[s.action, s.safe]} onPress={onSafe} accessibilityRole="button"
@@ -164,6 +176,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
   },
   retry: { backgroundColor: '#2563EB' },
+  refresh: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
   safe: { backgroundColor: '#15803D' },
   actionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
 });

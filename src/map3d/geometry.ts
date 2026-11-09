@@ -454,8 +454,13 @@ export type BuildingGeometry = {
   roof: THREE.BufferGeometry;
   outline: THREE.BufferGeometry;
   height: number;
-  /** Tiled top of a plinth (raised floor or corridor), drawn with the floor-tile texture. */
+  /**
+   * Tiled ground-level floor (top of a plinth or raised corridor), drawn with the floor-tile
+   * texture. The route line is drawn over it, so it holds ground-level floors only.
+   */
   floor?: THREE.BufferGeometry | null;
+  /** Tiled upper-storey floors (open corridors, pieces on an upper level); these hide the route. */
+  upperFloors?: THREE.BufferGeometry | null;
 };
 
 export function buildBuilding(b: CampusBuilding): BuildingGeometry | null {
@@ -561,7 +566,7 @@ function balconyStrip(ring: XY[], height: number, b: CampusBuilding): BuildingGe
   const lift = (b.plinth ?? 0) / METRES_PER_UNIT;
   const plinth = lift ? plinthSlab(ring, lift) : null;
   if (plinth) parts.push(plinth.sides);
-  const floorsGeo: (THREE.BufferGeometry | null)[] = [plinth?.top ?? null];
+  const upperFloors: (THREE.BufferGeometry | null)[] = [];
   for (let f = b.balconyGround ? 0 : 1; f < floors; f++) {
     const y = f * storey;
     for (const e of edges) {
@@ -571,7 +576,7 @@ function balconyStrip(ring: XY[], height: number, b: CampusBuilding): BuildingGe
     if (!f) continue;
     parts.push(soffit(ring, y - slab, []));
     const top = flatPolygon(ring, y);
-    if (top) floorsGeo.push(groundUV(top));
+    if (top) upperFloors.push(groundUV(top));
   }
   const post = (b.postSize ?? 0.35) / METRES_PER_UNIT, spacing = (b.postSpacing || 3.6) / METRES_PER_UNIT;
   const color = rgb(b.postColor ?? '#F2B01E');
@@ -587,7 +592,7 @@ function balconyStrip(ring: XY[], height: number, b: CampusBuilding): BuildingGe
   }
   const lip = (b.parapet ?? FASCIA_LIP_M) / METRES_PER_UNIT;
   parts.push(roofTrim(ring, [], height, lip));
-  return { ...finishBuilding(mergeAll(parts)!, flatPolygon(ring, height)!, [ring], [ring], height, lip), floor: mergeAll(floorsGeo) };
+  return { ...finishBuilding(mergeAll(parts)!, flatPolygon(ring, height)!, [ring], [ring], height, lip), floor: plinth?.top ?? null, upperFloors: mergeAll(upperFloors) };
 }
 
 /** Facade texture coordinate on a column (orange on 'arcade', plain wall on the others). */
@@ -717,8 +722,10 @@ function tileEave(outline: XY[], y: number): THREE.BufferGeometry {
 
 function raise(g: BuildingGeometry, base: number): BuildingGeometry {
   if (!base) return g;
-  g.walls.translate(0, base, 0); g.roof.translate(0, base, 0); g.outline.translate(0, base, 0); g.floor?.translate(0, base, 0);
-  return { ...g, height: g.height + base };
+  g.walls.translate(0, base, 0); g.roof.translate(0, base, 0); g.outline.translate(0, base, 0);
+  g.floor?.translate(0, base, 0); g.upperFloors?.translate(0, base, 0);
+  // A piece that starts on an upper level has no ground-level floor: all of its floors are upper.
+  return { ...g, floor: null, upperFloors: mergeAll([g.floor ?? null, g.upperFloors ?? null]), height: g.height + base };
 }
 
 function finishBuilding(wallGeometry: THREE.BufferGeometry, roof: THREE.BufferGeometry, rings: XY[][], roofRings: XY[][], height: number, lip: number): BuildingGeometry {

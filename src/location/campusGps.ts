@@ -190,6 +190,11 @@ const allObstacles = [...blockedPolygons, ...roofPolygons, ...waterPolygons];
 /** About 0.48 m per map unit (same scale as the 3D map). */
 const METRES_PER_MAP_UNIT = 0.48;
 /**
+ * A GPS point at most this far inside a building (metres) is taken as drift near the wall, not
+ * as being indoors. Deeper than this, the user is treated as inside and gets no route.
+ */
+export const WALL_DRIFT_M = 5;
+/**
  * Nearest point just outside the building that contains `p`, if within `maxDistance` map units
  * and clear of every other obstacle. Edges are tried nearest first, so a courtyard's
  * zero-width joining cut never wins.
@@ -258,8 +263,10 @@ export function screenOutdoorFix(fix: GpsFix): {
   }
   if (roofPolygons.some(poly => polygonNear(point, poly))) {
     // GPS often drifts a few metres into a building near its walls. If the nearest outdoor
-    // point is within the reported accuracy (at least 8 m), start the route from there.
-    const outside = nearestOutdoorPoint(point, Math.max(accuracy, 8) / METRES_PER_MAP_UNIT);
+    // point is that close, treat it as drift and start the route from there. The allowance is
+    // fixed: it used to be the reported accuracy (up to 18 m), but indoors the accuracy is poor,
+    // so almost anywhere inside a building counted as "near a wall" and still got a route.
+    const outside = nearestOutdoorPoint(point, WALL_DRIFT_M / METRES_PER_MAP_UNIT);
     if (outside) {
       return {usable:true,point:outside,code:'near-building',reason:
         'You may be inside a building. Go outside first; the route starts from the nearest outdoor point.'};

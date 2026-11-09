@@ -1,68 +1,98 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { Profile } from '../../services/safetyReports';
+import { PHONE_PATTERN, RECIPIENT_TYPES, type Profile, type RecipientType } from '../../services/safetyReports';
 
 type Props = {
   initial: Profile | null;
-  /** First launch: the name is required and the sheet cannot be closed without it. */
+  /** First launch (or an older sign-in without a mobile number): cannot be closed until complete. */
   required: boolean;
   onSave: (profile: Profile) => void;
   onClose: () => void;
 };
 
 /**
- * Asks once for the phone owner's name and ID number. They are sent with the push registration
- * and with safety reports, so campus staff can see who is safe during an alert.
+ * Sign in once: name, ID number, mobile number and whether you are a student, faculty or campus
+ * personnel. Sent with the push registration and safety reports, and makes you a recipient of
+ * SMS alerts in the admin panel. Kept even if the app is uninstalled and installed again.
  */
 export default function ProfileSheet({ initial, required, onSave, onClose }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [idNumber, setIdNumber] = useState(initial?.idNumber ?? '');
-  const valid = name.trim().length >= 2;
-  const save = () => { if (valid) onSave({ name, idNumber }); };
+  const [phone, setPhone] = useState(initial?.phone ?? '');
+  const [recipientType, setRecipientType] = useState<RecipientType | null>(initial?.recipientType ?? null);
+  const phoneValid = PHONE_PATTERN.test(phone.trim());
+  const valid = name.trim().length >= 2 && phoneValid && recipientType !== null;
+  const save = () => { if (valid) onSave({ name, idNumber, phone: phone.trim(), recipientType: recipientType! }); };
 
   return (
     <View style={s.overlay} accessibilityViewIsModal>
       <View style={s.backdrop} />
-      <View style={s.card}>
-        <View style={s.badge}>
-          <MaterialCommunityIcons name="account-check-outline" size={26} color="#1D4ED8" />
-        </View>
-        <Text style={s.title} accessibilityRole="header">Your details</Text>
-        <Text style={s.body}>
-          During an alert, campus staff see your name when you confirm you are safe.
-        </Text>
+      <KeyboardAvoidingView style={s.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <View style={s.card}>
+            <View style={s.badge}>
+              <MaterialCommunityIcons name="account-check-outline" size={26} color="#1D4ED8" />
+            </View>
+            <Text style={s.title} accessibilityRole="header">{required ? 'Sign in' : 'Your details'}</Text>
+            <Text style={s.body}>
+              Emergency alerts come as push notifications and by SMS to your number. Campus staff see
+              your name when you confirm you are safe.
+            </Text>
 
-        <Text style={s.label}>Full name *</Text>
-        <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g. Juan Dela Cruz"
-          placeholderTextColor="#94A3B8" autoCapitalize="words" autoComplete="name" maxLength={80}
-          returnKeyType="next" accessibilityLabel="Full name" />
+            <Text style={s.label}>I am a *</Text>
+            <View style={s.types} accessibilityRole="radiogroup">
+              {RECIPIENT_TYPES.map(type => {
+                const selected = recipientType === type.id;
+                return (
+                  <Pressable key={type.id} style={[s.type, selected && s.typeSelected]} onPress={() => setRecipientType(type.id)}
+                    accessibilityRole="radio" accessibilityState={{ checked: selected }}>
+                    <Text style={[s.typeText, selected && s.typeTextSelected]}>{type.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-        <Text style={s.label}>ID number</Text>
-        <TextInput style={s.input} value={idNumber} onChangeText={setIdNumber} placeholder="Student or employee ID"
-          placeholderTextColor="#94A3B8" autoCapitalize="characters" maxLength={40}
-          returnKeyType="done" onSubmitEditing={save} accessibilityLabel="ID number" />
+            <Text style={s.label}>Full name *</Text>
+            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g. Juan Dela Cruz"
+              placeholderTextColor="#94A3B8" autoCapitalize="words" autoComplete="name" maxLength={80}
+              returnKeyType="next" accessibilityLabel="Full name" />
 
-        <Pressable style={[s.primary, !valid && s.disabled]} onPress={save} disabled={!valid} accessibilityRole="button">
-          <Text style={s.primaryText}>Save</Text>
-        </Pressable>
-        {!required && (
-          <Pressable style={s.secondary} onPress={onClose} accessibilityRole="button">
-            <Text style={s.secondaryText}>Cancel</Text>
-          </Pressable>
-        )}
-      </View>
+            <Text style={s.label}>Mobile number *</Text>
+            <TextInput style={[s.input, phone.length === 11 && !phoneValid && s.inputError]} value={phone}
+              onChangeText={text => setPhone(text.replace(/[^0-9]/g, ''))} placeholder="09XXXXXXXXX"
+              placeholderTextColor="#94A3B8" keyboardType="phone-pad" autoComplete="tel" maxLength={11}
+              returnKeyType="next" accessibilityLabel="Mobile number" />
+            <Text style={[s.hint, phone.length > 0 && !phoneValid && s.hintError]}>
+              11 digits starting with 09, for SMS alerts.
+            </Text>
+
+            <Text style={s.label}>ID number</Text>
+            <TextInput style={s.input} value={idNumber} onChangeText={setIdNumber} placeholder="Student or employee ID"
+              placeholderTextColor="#94A3B8" autoCapitalize="characters" maxLength={40}
+              returnKeyType="done" onSubmitEditing={save} accessibilityLabel="ID number" />
+
+            <Pressable style={[s.primary, !valid && s.disabled]} onPress={save} disabled={!valid} accessibilityRole="button">
+              <Text style={s.primaryText}>{required ? 'Continue' : 'Save'}</Text>
+            </Pressable>
+            {!required && (
+              <Pressable style={s.secondary} onPress={onClose} accessibilityRole="button">
+                <Text style={s.secondaryText}>Cancel</Text>
+              </Pressable>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   // Elevation on a view without a background: a translucent view with elevation shows its own shadow.
-  overlay: {
-    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 130, elevation: 130,
-    justifyContent: 'flex-start', paddingHorizontal: 20, paddingTop: 90,
-  },
+  overlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 130, elevation: 130 },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(15,23,42,0.6)' },
+  fill: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 30 },
   card: {
     backgroundColor: '#FFFFFF', borderRadius: 22, padding: 20,
     shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 18, elevation: 12,
@@ -71,10 +101,21 @@ const s = StyleSheet.create({
   title: { marginTop: 10, fontSize: 20, fontWeight: '900', color: '#0F172A', textAlign: 'center' },
   body: { marginTop: 6, marginBottom: 6, fontSize: 13, lineHeight: 19, fontWeight: '600', color: '#475569', textAlign: 'center' },
   label: { marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: '800', color: '#334155' },
+  types: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  type: {
+    paddingHorizontal: 14, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center',
+  },
+  typeSelected: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+  typeText: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  typeTextSelected: { color: '#1D4ED8' },
   input: {
     height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#CBD5E1', paddingHorizontal: 14,
     fontSize: 15, fontWeight: '600', color: '#0F172A', backgroundColor: '#F8FAFC',
   },
+  inputError: { borderColor: '#DC2626' },
+  hint: { marginTop: 5, fontSize: 11, fontWeight: '600', color: '#64748B' },
+  hintError: { color: '#B42318' },
   primary: { marginTop: 18, height: 50, borderRadius: 14, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center' },
   disabled: { backgroundColor: '#94A3B8' },
   primaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },

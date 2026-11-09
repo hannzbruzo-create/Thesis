@@ -7,7 +7,8 @@ import type { Profile } from '../../services/safetyReports';
 type Props = {
   /** The evacuation area the user walked into; null when they pressed "I'm safe" elsewhere. */
   area: EvacuationArea | null;
-  /** No name saved yet: ask for it here, so staff know who is safe. */
+  /** No name saved yet: ask for it here, so staff know who is safe. Only the name and ID, to keep
+   * this quick during an alert; the full sign-in (mobile number, type) is asked afterwards. */
   needsProfile: boolean;
   onSafe: (profile?: Profile) => void;
   onNotNow: () => void;

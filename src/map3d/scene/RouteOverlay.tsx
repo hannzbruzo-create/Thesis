@@ -55,13 +55,16 @@ function RouteLine({ plan, animate }: { plan: PreviewPlan; animate: boolean }) {
   });
 
   if (!casing || !line) return null;
+  // No depth test: the route is drawn after the ground, raised sidewalks, curbs and ground-level
+  // floors (see LAYER), so it always lies on top of them instead of sinking under the ones that
+  // stand higher than the line. Walls, roofs and trees draw later and still cover it.
   return (
     <group>
       <mesh geometry={casing} renderOrder={LAYER.routeCasing}>
-        <meshBasicMaterial color="#FFFFFF" depthWrite={false} />
+        <meshBasicMaterial color="#FFFFFF" depthWrite={false} depthTest={false} />
       </mesh>
       <mesh geometry={line} renderOrder={LAYER.route}>
-        <meshBasicMaterial color="#2563EB" depthWrite={false} />
+        <meshBasicMaterial color="#2563EB" depthWrite={false} depthTest={false} />
       </mesh>
     </group>
   );

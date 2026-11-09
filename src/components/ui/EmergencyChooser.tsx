@@ -8,7 +8,7 @@ import type { PushStatus } from '../../services/safetyReports';
 const PUSH_TEXT: Record<PushStatus, { text: string; color: string } | null> = {
   registered: { text: 'Push alerts on: campus staff can reach this phone', color: '#15803D' },
   checking: { text: 'Setting up push alerts...', color: '#64748B' },
-  'needs-name': { text: 'Add your name to receive push alerts', color: '#B45309' },
+  'needs-name': { text: 'Sign in to receive push alerts', color: '#B45309' },
   blocked: { text: 'Notifications are off. Tap to allow them in Settings', color: '#B42318' },
   'no-push': { text: 'Push alerts unavailable on this phone (retrying)', color: '#B45309' },
   offline: { text: "Can't connect to register for alerts (retrying)", color: '#B45309' },
@@ -59,10 +59,10 @@ export default function EmergencyChooser({ onSelect, profileName, onEditProfile,
           <MaterialCommunityIcons name="chevron-right" size={25} color="#AD6800" />
         </Pressable>
         <Pressable style={s.profile} onPress={onEditProfile} accessibilityRole="button"
-          accessibilityLabel="Edit your name and ID number">
+          accessibilityLabel="Edit your sign-in details">
           <MaterialCommunityIcons name="account-circle-outline" size={20} color="#475569" />
           <Text style={s.profileText} numberOfLines={1}>
-            {profileName ? `Your details: ${profileName}` : 'Add your name and ID'}
+            {profileName ? `Signed in: ${profileName}` : 'Sign in with your name and number'}
           </Text>
           <Text style={s.profileEdit}>Edit</Text>
         </Pressable>

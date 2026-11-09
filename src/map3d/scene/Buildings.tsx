@@ -50,7 +50,12 @@ function tinted(g: THREE.BufferGeometry, color: THREE.Color, lift: number) {
 function MergedBuildings({ buildings }: { buildings: { b: CampusBuilding; lift: number }[] }) {
   const merged = useMemo(() => {
     const walls = new Map<string, { map: THREE.Texture | null; parts: THREE.BufferGeometry[] }>();
-    const roofs: THREE.BufferGeometry[] = [], floors: THREE.BufferGeometry[] = [], lines: THREE.BufferGeometry[] = [];
+    const roofs: THREE.BufferGeometry[] = [], floors: THREE.BufferGeometry[] = [], upper: THREE.BufferGeometry[] = [], lines: THREE.BufferGeometry[] = [];
+    const floorPart = (g: THREE.BufferGeometry, lift: number) => {
+      const f = (g.index ? g.toNonIndexed() : g.clone()).translate(0, lift, 0);
+      if (!f.getAttribute('normal')) f.computeVertexNormals();
+      return f;
+    };
     for (const { b, lift } of buildings) {
       const g = geometryOf(b);
       if (!g) continue;
@@ -58,21 +63,18 @@ function MergedBuildings({ buildings }: { buildings: { b: CampusBuilding; lift: 
       if (!walls.has(key)) walls.set(key, { map: facadeMap(b), parts: [] });
       walls.get(key)!.parts.push(tinted(g.walls, new THREE.Color(b.wallColor), lift));
       roofs.push(tinted(g.roof, new THREE.Color(b.roofColor), lift));
-      if (g.floor) {
-        const f = (g.floor.index ? g.floor.toNonIndexed() : g.floor.clone()).translate(0, lift, 0);
-        if (!f.getAttribute('normal')) f.computeVertexNormals();
-        floors.push(f);
-      }
+      if (g.floor) floors.push(floorPart(g.floor, lift));
+      if (g.upperFloors) upper.push(floorPart(g.upperFloors, lift));
       lines.push(g.outline.clone().translate(0, lift, 0));
     }
     const done = (list: THREE.BufferGeometry[]) => { const m = mergeAll(list); list.forEach(p => p.dispose()); return m; };
     return {
       walls: [...walls.entries()].map(([key, w]) => ({ key, map: w.map, geometry: done(w.parts) })),
-      roof: done(roofs), floor: done(floors), outline: done(lines),
+      roof: done(roofs), floor: done(floors), upperFloors: done(upper), outline: done(lines),
     };
   }, [buildings]);
   useEffect(() => () => {
-    merged.walls.forEach(w => w.geometry?.dispose()); merged.roof?.dispose(); merged.floor?.dispose(); merged.outline?.dispose();
+    merged.walls.forEach(w => w.geometry?.dispose()); merged.roof?.dispose(); merged.floor?.dispose(); merged.upperFloors?.dispose(); merged.outline?.dispose();
   }, [merged]);
   const tex = groundTextures();
   return (
@@ -81,7 +83,9 @@ function MergedBuildings({ buildings }: { buildings: { b: CampusBuilding; lift: 
         <mesh key={w.key} geometry={w.geometry}><meshLambertMaterial map={w.map} vertexColors /></mesh>
       ))}
       {merged.roof && <mesh geometry={merged.roof}><meshLambertMaterial map={tex.roof} vertexColors /></mesh>}
-      {merged.floor && <mesh geometry={merged.floor}><meshLambertMaterial map={tex.tile} /></mesh>}
+      {/* Ground-level floors draw before the route (LAYER.raised) so the route lies on top of them. */}
+      {merged.floor && <mesh geometry={merged.floor} renderOrder={LAYER.raised}><meshLambertMaterial map={tex.tile} /></mesh>}
+      {merged.upperFloors && <mesh geometry={merged.upperFloors}><meshLambertMaterial map={tex.tile} /></mesh>}
       {merged.outline && (
         <lineSegments geometry={merged.outline}><lineBasicMaterial color={OUTLINE} transparent opacity={0.2} /></lineSegments>
       )}
@@ -104,7 +108,12 @@ const Building = memo(function Building({ building, selected, lift }: { building
         <meshLambertMaterial color={building.roofColor} map={groundTextures().roof} emissive={highlight} emissiveIntensity={selected ? 0.35 : 0} />
       </mesh>
       {geometry.floor && (
-        <mesh geometry={geometry.floor}>
+        <mesh geometry={geometry.floor} renderOrder={LAYER.raised}>
+          <meshLambertMaterial map={groundTextures().tile} />
+        </mesh>
+      )}
+      {geometry.upperFloors && (
+        <mesh geometry={geometry.upperFloors}>
           <meshLambertMaterial map={groundTextures().tile} />
         </mesh>
       )}

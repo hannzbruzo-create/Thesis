@@ -13,7 +13,7 @@ import SafeConfirmPopup from '../components/ui/SafeConfirmPopup';
 import ProfileSheet from '../components/ui/ProfileSheet';
 import { EVACUATION_AREAS, evacuationAreaAt, type EvacuationArea } from '../data/evacuationAreas';
 import {
-  getPushStatus, loadUser, onProfileChange, onPushStatus, registerForPush, reportStatus, saveProfile, setIncident,
+  getPushStatus, isCompleteProfile, loadUser, onProfileChange, onPushStatus, registerForPush, reportStatus, saveProfile, setIncident,
   startReporting, type Profile, type PushStatus, type ReportArea,
 } from '../services/safetyReports';
 import type { EmergencyType } from '../emergency/emergencyTypes';
@@ -67,6 +67,11 @@ const OUTSIDE_CONFIRM_FIXES = 8;
 /** "No route" only after this many failed route attempts over this long, with no success between. */
 const ROUTE_FAIL_CONFIRM_MS = 20000;
 const ROUTE_FAIL_CONFIRM_TRIES = 6;
+/** "Inside a building" only after this many inside fixes over this long; then the route is removed. */
+const INSIDE_CONFIRM_FIXES = 3;
+const INSIDE_CONFIRM_MS = 5000;
+/** The refresh button stops spinning after this long even if no new route came (ms). */
+const REFRESH_SPIN_MAX_MS = 12000;
 
 export default function HomeScreen({ emergencyRequest }: Props) {
   const [stage, setStage] = useState<Stage>('choose');
@@ -103,6 +108,10 @@ export default function HomeScreen({ emergencyRequest }: Props) {
   const noRouteClock = useRef(0);
   const outsideStreak = useRef<{ since: number; count: number } | null>(null);
   const routeFails = useRef<{ since: number; count: number } | null>(null);
+  // Running streak of GPS fixes inside a building, and a pending refresh (recalculate on the next fix).
+  const insideStreak = useRef<{ since: number; count: number } | null>(null);
+  const forceReroute = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   // GPS test panel (long-press the GPS line in the bottom card) and tap-to-calibrate.
   const [gpsTestOpen, setGpsTestOpen] = useState(false);
@@ -145,6 +154,9 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     mostRecentFix.current = 0;
     outsideStreak.current = null;
     routeFails.current = null;
+    insideStreak.current = null;
+    forceReroute.current = false;
+    setRefreshing(false);
     gpsFilter.current.reset();
     routeSegment.current = 0;
     markerState.current = { shown: null, onRoute: false, along: 0 };
@@ -187,17 +199,22 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     startReporting();
   }, [resetRoute]);
 
-  // The phone owner's name and ID: asked once on the first launch, then used for push
-  // registration and safety reports.
+  // The phone owner's sign-in (name, ID, mobile number, type): asked once on the first launch
+  // (restored instead after a reinstall), then used for push registration, SMS and safety
+  // reports. Older sign-ins without a mobile number are asked once to complete it.
   useEffect(() => {
     void loadUser().then(saved => {
       setProfile(saved);
-      if (!saved) setProfileSheet(sheet => sheet ?? 'required');
+      if (!isCompleteProfile(saved)) setProfileSheet(sheet => sheet ?? 'required');
       void registerForPush();
     });
     // Back in the app (e.g. after allowing notifications in Settings): try registering again.
     const appState = AppState.addEventListener('change', state => { if (state === 'active') void registerForPush(); });
-    const stopProfile = onProfileChange(setProfile);
+    const stopProfile = onProfileChange(changed => {
+      setProfile(changed);
+      // A sign-in restored late (slow connection at start-up) closes the first-launch form.
+      if (isCompleteProfile(changed)) setProfileSheet(sheet => (sheet === 'required' ? null : sheet));
+    });
     const stopPush = onPushStatus(setPushStatus);
     return () => { appState.remove(); stopProfile(); stopPush(); };
   }, []);
@@ -288,6 +305,22 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     setOutsideCampus(false);
     retryGps();
   }, [retryGps]);
+
+  // Refresh button on the map: start over from a fresh GPS fix (smoothing reset, new location
+  // request) and recalculate the route on the next good fix. The current route stays visible
+  // until the new one is ready.
+  const refreshRoute = useCallback(() => {
+    gpsFilter.current.reset();
+    forceReroute.current = true;
+    setRefreshing(true);
+    retryRoute();
+    setLiveMessage('Refreshing your location and route...');
+  }, [retryRoute]);
+  useEffect(() => {
+    if (!refreshing) return;
+    const timer = setTimeout(() => setRefreshing(false), REFRESH_SPIN_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [refreshing]);
 
   /**
    * Shows the user marker without jitter: snapped onto the route while following it (with
@@ -401,6 +434,31 @@ export default function HomeScreen({ emergencyRequest }: Props) {
     // The barometer learns ground level only from confident outdoor fixes.
     setAtGround(check.code === 'ok');
     if (gpsTestRef.current) setGpsDebug({ raw, smoothed: fix, point: check.point, screen: check.code });
+    if (check.code !== 'inside-building') insideStreak.current = null;
+    else if (check.point) {
+      const inside = insideStreak.current ?? (insideStreak.current = { since: now, count: 0 });
+      inside.count += 1;
+      if (inside.count >= INSIDE_CONFIRM_FIXES && now - inside.since >= INSIDE_CONFIRM_MS) {
+        // Confirmed inside a building: navigation is outdoor-only, so remove the route instead of
+        // keeping one that starts outside. The marker shows where GPS puts you; a new route is
+        // calculated (as at the start) once a fix shows you outdoors.
+        lastCalculated.current = null;
+        activeFocus.current = null;
+        routeSegment.current = 0;
+        markerState.current = { shown: check.point, onRoute: false, along: 0 };
+        forceReroute.current = false;
+        setRefreshing(false);
+        setAnimateRoute(false);
+        setStart(null);
+        setStartOnPath(false);
+        setPlan(null);
+        setDisplayPlan(null);
+        setStartPoint(check.point);
+        setRouteWarning(false);
+        setLiveMessage(check.reason);
+        return;
+      }
+    }
     if (!check.usable || !check.point) {
       if (check.code === 'outside-campus') {
         const streak = outsideStreak.current ?? (outsideStreak.current = { since: now, count: 0 });
@@ -458,11 +516,13 @@ export default function HomeScreen({ emergencyRequest }: Props) {
       }
     }
     const previous = lastCalculated.current;
+    // After the refresh button, the next good fix is trusted and always recalculates the route.
+    const forced = forceReroute.current;
     const moved = previous ? distanceMeters(previous.fix, fix) : Infinity;
     const elapsedSeconds = previous
       ? Math.max(1, (fix.timestamp - previous.fix.timestamp) / 1000)
       : Infinity;
-    if (previous && moved > Math.max(45, elapsedSeconds * 12)) {
+    if (previous && !forced && moved > Math.max(45, elapsedSeconds * 12)) {
       setRouteWarning(true);
       setLiveMessage('Unstable GPS position. Keeping your last verified route.');
       return;
@@ -483,8 +543,8 @@ export default function HomeScreen({ emergencyRequest }: Props) {
 
     const elapsed = previous ? Date.now() - previous.at : Infinity;
     // On the route: keep it, and only re-check now and then whether another area became closer.
-    if (previous && progress?.onRoute && elapsed < ON_ROUTE_RECHECK_MS) return;
-    if (previous && !outsideCampus &&
+    if (!forced && previous && progress?.onRoute && elapsed < ON_ROUTE_RECHECK_MS) return;
+    if (!forced && previous && !outsideCampus &&
         (moved < MIN_REROUTE_MOVEMENT_M || elapsed < MIN_REROUTE_INTERVAL_MS ||
          (animateRoute && Date.now() - previous.at < 3000))) return;
 
@@ -508,6 +568,7 @@ export default function HomeScreen({ emergencyRequest }: Props) {
       return;
     }
     routeFails.current = null;
+    if (forced) { forceReroute.current = false; setRefreshing(false); }
     setRouteWarning(false);
     setNoRoute(false);
     setStart(result.plan.start);
@@ -579,16 +640,18 @@ export default function HomeScreen({ emergencyRequest }: Props) {
           onToggleGpsTest={() => setGpsTestOpen(v => !v)}
           onSafe={markSafe}
           onRetryGps={retryGps}
+          onRefresh={refreshRoute}
+          refreshing={refreshing}
         />
       )}
       {!editorOpen && stage === 'navigation' && noRoute && (
         <NoRouteWarning onRetry={retryRoute} onOutsideCampus={backToStart} />
       )}
       {!editorOpen && stage === 'navigation' && safePrompt && (
-        <SafeConfirmPopup area={safePrompt.area} needsProfile={!profile} onSafe={confirmSafe} onNotNow={dismissSafePrompt} />
+        <SafeConfirmPopup area={safePrompt.area} needsProfile={!profile?.name} onSafe={confirmSafe} onNotNow={dismissSafePrompt} />
       )}
       {!editorOpen && stage === 'choose' && (
-        <EmergencyChooser onSelect={selectEmergency} profileName={profile?.name ?? null}
+        <EmergencyChooser onSelect={selectEmergency} profileName={profile ? [profile.name, profile.phone].filter(Boolean).join(' · ') : null}
           onEditProfile={() => setProfileSheet('edit')} pushStatus={pushStatus} />
       )}
       {/* Never in the way during an emergency: the first-launch form waits for the chooser. */}

@@ -6,6 +6,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-three/fiber": "^9.8.2",
     "expo": "~57.0.31",
+    "expo-application": "~57.0.3",
     "expo-asset": "~57.0.20",
     "expo-constants": "~57.0.22",
     "expo-file-system": "~57.0.7",
