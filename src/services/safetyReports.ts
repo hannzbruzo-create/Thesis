@@ -23,12 +23,10 @@ import { firebaseConfigured, firebaseSession, getDocument, setDocument, type Fir
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 const reachable = firebaseConfigured || Boolean(API_URL);
 
-export type RecipientType = 'student' | 'faculty' | 'campus_personnel';
-export const RECIPIENT_TYPES: { id: RecipientType; label: string }[] = [
-  { id: 'student', label: 'Student' },
-  { id: 'faculty', label: 'Faculty' },
-  { id: 'campus_personnel', label: 'Campus Personnel' },
-];
+/** Only students are recipients. Older versions also offered 'faculty' and 'campus_personnel';
+ * sign-ins saved with those are turned into 'student'. */
+export type RecipientType = 'student';
+export const RECIPIENT_TYPE: RecipientType = 'student';
 /** Philippine mobile number as the admin panel stores it: 09XXXXXXXXX. */
 export const PHONE_PATTERN = /^09\d{9}$/;
 
@@ -39,7 +37,7 @@ export type CompleteProfile = Required<Profile>;
 
 export function isCompleteProfile(profile: Profile | null | undefined): profile is CompleteProfile {
   return Boolean(profile && profile.name.trim().length >= 2 && profile.phone && PHONE_PATTERN.test(profile.phone)
-    && RECIPIENT_TYPES.some(type => type.id === profile.recipientType));
+    && profile.recipientType === RECIPIENT_TYPE);
 }
 export type SafetyStatus = 'navigating' | 'arrived' | 'safe_confirmed';
 export type ReportArea = { id: string; name: string };
@@ -110,6 +108,13 @@ export async function loadUser(): Promise<Profile | null> {
   if (!saved) saved = { deviceId: androidId ?? newDeviceId(), profile: null };
   // Installs from before the Android ID was used move over to it.
   if (androidId && saved.deviceId !== androidId) saved.deviceId = androidId;
+  // Sign-ins saved as faculty or campus personnel become students, and are saved again so the
+  // server's copy changes too.
+  if (saved.profile && saved.profile.recipientType !== RECIPIENT_TYPE) {
+    const hadType = Boolean(saved.profile.recipientType);
+    saved.profile = { ...saved.profile, recipientType: RECIPIENT_TYPE };
+    if (hadType) saved.profileDirty = true;
+  }
   persist();
   await restoreSavedProfile();
   return saved.profile;
@@ -139,7 +144,8 @@ function profileFrom(data: Record<string, unknown> | null | undefined): Complete
     name: typeof data.name === 'string' ? data.name.trim() : '',
     idNumber: typeof data.idNumber === 'string' ? data.idNumber.trim() : '',
     phone: typeof data.phone === 'string' ? data.phone.trim() : '',
-    recipientType: data.recipientType as RecipientType,
+    // Older copies may say faculty or campus_personnel: everyone is a student now.
+    recipientType: RECIPIENT_TYPE,
   };
   return isCompleteProfile(profile) ? profile : null;
 }
@@ -178,11 +184,18 @@ async function syncSavedProfile(uid: string, idToken: string) {
     if (status >= 200 && status < 300 && saved.profile === local) { saved.profileDirty = false; persist(); }
     return;
   }
-  const remote = profileFrom(await getDocument(`profiles/${androidId}`, idToken));
+  const data = await getDocument(`profiles/${androidId}`, idToken);
+  const remote = profileFrom(data);
   if (remote && saved.profile === local && (!local || !sameProfile(local, remote))) {
     saved.profile = remote;
     persist();
     listeners.forEach(fn => fn(remote));
+  }
+  // The server's copy still says faculty or campus_personnel: rewrite it as a student.
+  if (remote && saved.profile === remote && data?.recipientType !== RECIPIENT_TYPE) {
+    saved.profileDirty = true;
+    persist();
+    await syncSavedProfile(uid, idToken);
   }
 }
 
@@ -198,7 +211,7 @@ export function saveProfile(profile: Profile) {
     name: profile.name.trim(), idNumber: profile.idNumber.trim(),
     // A name-only save (confirming safe during an alert) keeps a number entered earlier.
     phone: phone || saved.profile?.phone,
-    recipientType: profile.recipientType ?? saved.profile?.recipientType,
+    recipientType: RECIPIENT_TYPE,
   };
   saved.profileDirty = true;
   persist();

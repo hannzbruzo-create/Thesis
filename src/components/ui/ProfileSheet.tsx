@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { PHONE_PATTERN, RECIPIENT_TYPES, type Profile, type RecipientType } from '../../services/safetyReports';
+import { PHONE_PATTERN, RECIPIENT_TYPE, type Profile } from '../../services/safetyReports';
 
 type Props = {
   initial: Profile | null;
@@ -12,18 +12,17 @@ type Props = {
 };
 
 /**
- * Sign in once: name, ID number, mobile number and whether you are a student, faculty or campus
- * personnel. Sent with the push registration and safety reports, and makes you a recipient of
- * SMS alerts in the admin panel. Kept even if the app is uninstalled and installed again.
+ * Sign in once: name, mobile number and student ID. Sent with the push registration and safety
+ * reports, and makes you a recipient of SMS alerts in the admin panel (recipients are students
+ * only). Kept even if the app is uninstalled and installed again.
  */
 export default function ProfileSheet({ initial, required, onSave, onClose }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [idNumber, setIdNumber] = useState(initial?.idNumber ?? '');
   const [phone, setPhone] = useState(initial?.phone ?? '');
-  const [recipientType, setRecipientType] = useState<RecipientType | null>(initial?.recipientType ?? null);
   const phoneValid = PHONE_PATTERN.test(phone.trim());
-  const valid = name.trim().length >= 2 && phoneValid && recipientType !== null;
-  const save = () => { if (valid) onSave({ name, idNumber, phone: phone.trim(), recipientType: recipientType! }); };
+  const valid = name.trim().length >= 2 && phoneValid;
+  const save = () => { if (valid) onSave({ name, idNumber, phone: phone.trim(), recipientType: RECIPIENT_TYPE }); };
 
   return (
     <View style={s.overlay} accessibilityViewIsModal>
@@ -40,19 +39,6 @@ export default function ProfileSheet({ initial, required, onSave, onClose }: Pro
               your name when you confirm you are safe.
             </Text>
 
-            <Text style={s.label}>I am a *</Text>
-            <View style={s.types} accessibilityRole="radiogroup">
-              {RECIPIENT_TYPES.map(type => {
-                const selected = recipientType === type.id;
-                return (
-                  <Pressable key={type.id} style={[s.type, selected && s.typeSelected]} onPress={() => setRecipientType(type.id)}
-                    accessibilityRole="radio" accessibilityState={{ checked: selected }}>
-                    <Text style={[s.typeText, selected && s.typeTextSelected]}>{type.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
             <Text style={s.label}>Full name *</Text>
             <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g. Juan Dela Cruz"
               placeholderTextColor="#94A3B8" autoCapitalize="words" autoComplete="name" maxLength={80}
@@ -68,7 +54,7 @@ export default function ProfileSheet({ initial, required, onSave, onClose }: Pro
             </Text>
 
             <Text style={s.label}>ID number</Text>
-            <TextInput style={s.input} value={idNumber} onChangeText={setIdNumber} placeholder="Student or employee ID"
+            <TextInput style={s.input} value={idNumber} onChangeText={setIdNumber} placeholder="Student ID"
               placeholderTextColor="#94A3B8" autoCapitalize="characters" maxLength={40}
               returnKeyType="done" onSubmitEditing={save} accessibilityLabel="ID number" />
 
@@ -101,14 +87,6 @@ const s = StyleSheet.create({
   title: { marginTop: 10, fontSize: 20, fontWeight: '900', color: '#0F172A', textAlign: 'center' },
   body: { marginTop: 6, marginBottom: 6, fontSize: 13, lineHeight: 19, fontWeight: '600', color: '#475569', textAlign: 'center' },
   label: { marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: '800', color: '#334155' },
-  types: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  type: {
-    paddingHorizontal: 14, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center',
-  },
-  typeSelected: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
-  typeText: { fontSize: 14, fontWeight: '700', color: '#334155' },
-  typeTextSelected: { color: '#1D4ED8' },
   input: {
     height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#CBD5E1', paddingHorizontal: 14,
     fontSize: 15, fontWeight: '600', color: '#0F172A', backgroundColor: '#F8FAFC',
