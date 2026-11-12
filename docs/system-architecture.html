@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>System Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 2400px; height: 1370px; background: #fff; font-family: Helvetica, Arial, sans-serif; color: #111; }
+  .frame { position: absolute; left: 20px; top: 20px; width: 2360px; height: 1330px; border: 2px solid #333; }
+  .module { position: absolute; border: 2px solid #444; background: #fff; }
+  .module > h2 { position: absolute; left: 0; right: 0; top: 18px; text-align: center; font-size: 34px; font-weight: 400; line-height: 1.2; }
+  .box { position: absolute; border: 2px solid #444; border-radius: 26px; background: #fff;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+         font-size: 31px; line-height: 1.22; padding: 10px 14px; }
+  .box small { display: block; margin-top: 8px; font-size: 23px; color: #444; line-height: 1.25; }
+  .tech { font-size: 27px; line-height: 1.35; }
+  .tech b { font-size: 31px; font-weight: 400; }
+  .ellipse { border-radius: 50%; }
+  .label { position: absolute; text-align: center; font-size: 32px; }
+  .note { position: absolute; font-size: 25px; color: #222; background: #fff; padding: 0 8px; text-align: center; line-height: 1.25; }
+  svg.lines { position: absolute; left: 0; top: 0; }
+</style>
+</head>
+<body>
+<div class="frame"></div>
+
+<!-- ACTORS -->
+<svg style="position:absolute;left:70px;top:190px" width="210" height="170" viewBox="0 0 210 170">
+  <g fill="#555">
+    <circle cx="62" cy="40" r="30"/><path d="M8 150 Q8 80 62 78 Q116 80 116 150 Z"/>
+    <circle cx="130" cy="48" r="36"/><path d="M66 170 Q66 92 130 90 Q194 92 194 170 Z" stroke="#fff" stroke-width="5"/>
+  </g>
+</svg>
+<div class="label" style="left:40px;top:130px;width:270px">Students</div>
+
+<svg style="position:absolute;left:70px;top:960px" width="210" height="170" viewBox="0 0 210 170">
+  <rect x="6" y="6" width="160" height="112" rx="8" fill="none" stroke="#555" stroke-width="12"/>
+  <rect x="70" y="118" width="32" height="22" fill="#555"/><rect x="40" y="138" width="92" height="12" rx="4" fill="#555"/>
+  <circle cx="160" cy="88" r="26" fill="#555" stroke="#fff" stroke-width="5"/>
+  <path d="M106 170 Q106 116 160 114 Q214 116 214 170 Z" fill="#555" stroke="#fff" stroke-width="5"/>
+</svg>
+<div class="label" style="left:40px;top:1145px;width:270px">Admin (PPFMO)</div>
+
+<!-- MODULE 1: MOBILE APP -->
+<div class="module" style="left:330px;top:45px;width:1300px;height:560px">
+  <h2>Module 1: TomaSafe Mobile App<br>(evacuation pathfinding)</h2>
+  <div class="box" style="left:30px;top:150px;width:240px;height:300px">Student sign-in<small>name, mobile no., student ID (once)</small></div>
+  <div class="box ellipse" style="left:295px;top:150px;width:280px;height:300px">2.5D top-down map of the UST-L campus</div>
+  <div class="box" style="left:600px;top:150px;width:270px;height:300px">Route to the nearest evacuation area<small>Dijkstra's algorithm, outdoor roads only</small></div>
+  <div class="box" style="left:895px;top:150px;width:200px;height:300px">Guidance<small>GPS, voice directions, step &amp; floor detection</small></div>
+  <div class="box tech" style="left:1115px;top:150px;width:165px;height:300px"><b>React Native</b>Expo<br>TypeScript<br>Three.js</div>
+</div>
+
+<!-- MODULE 4: SAFETY STATUS -->
+<div class="module" style="left:1690px;top:45px;width:660px;height:560px">
+  <h2>Module 4: Safety Status<br>Monitoring</h2>
+  <div class="box" style="left:30px;top:150px;width:280px;height:300px">Status report from the app<small>navigating → arrived → confirmed safe</small></div>
+  <div class="box" style="left:350px;top:150px;width:280px;height:300px">Live count on the admin dashboard<small>safe / arrived / navigating / no response; admin closes the alert</small></div>
+</div>
+
+<!-- MODULE 2: ADMIN PANEL -->
+<div class="module" style="left:330px;top:770px;width:960px;height:560px">
+  <h2>Module 2: Admin Panel</h2>
+  <div class="box" style="left:30px;top:95px;width:300px;height:200px">Admin login &amp; admin accounts</div>
+  <div class="box" style="left:350px;top:95px;width:300px;height:200px">Student recipients<small>add / edit / remove</small></div>
+  <div class="box" style="left:30px;top:320px;width:300px;height:210px">Send alert<small>fire (with building) or earthquake</small></div>
+  <div class="box" style="left:350px;top:320px;width:300px;height:210px">Alert history<small>view details / delete</small></div>
+  <div class="box tech" style="left:680px;top:95px;width:250px;height:435px"><b>React (JSX)</b>Vite<br>HTML<br>CSS<br>JavaScript</div>
+</div>
+
+<!-- MODULE 3: SERVER + NOTIFICATIONS -->
+<div class="module" style="left:1350px;top:770px;width:660px;height:560px">
+  <h2>Module 3: Server with Push<br>&amp; SMS Notification</h2>
+  <div class="box" style="left:30px;top:130px;width:600px;height:150px">Node.js + Express REST API<small>admin login (JWT), alerts, recipients, status reports</small></div>
+  <div class="box" style="left:30px;top:310px;width:180px;height:220px">SQLite database</div>
+  <div class="box" style="left:230px;top:310px;width:195px;height:220px">Push alert<small>Firebase Cloud Messaging</small></div>
+  <div class="box" style="left:445px;top:310px;width:185px;height:220px">SMS alert<small>TextBee</small></div>
+</div>
+
+<!-- FIREBASE -->
+<svg style="position:absolute;left:2120px;top:840px" width="180" height="230" viewBox="0 0 180 230">
+  <defs>
+    <linearGradient id="fb" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#F97316"/></linearGradient>
+  </defs>
+  <g stroke="#B45309" stroke-width="3">
+    <path d="M10 40 V190 A80 28 0 0 0 170 190 V40" fill="url(#fb)"/>
+    <ellipse cx="90" cy="40" rx="80" ry="28" fill="#FCD34D"/>
+    <path d="M10 90 A80 28 0 0 0 170 90 M10 140 A80 28 0 0 0 170 140" fill="none"/>
+  </g>
+</svg>
+<div class="label" style="left:2040px;top:1090px;width:340px;line-height:1.25">Firebase<br><span style="font-size:24px;color:#444">Firestore (sign-ins, devices, status reports, active alert) + Cloud Messaging</span></div>
+
+<!-- ARROWS -->
+<svg class="lines" width="2400" height="1500">
+  <defs>
+    <marker id="a" markerWidth="5" markerHeight="5" refX="3.6" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5 L1.2 2.5 Z" fill="#000"/></marker>
+  </defs>
+  <g stroke="#000" stroke-width="8" fill="none" marker-end="url(#a)">
+    <!-- students use the app -->
+    <path d="M285 290 H318"/>
+    <!-- admin uses the panel -->
+    <path d="M285 1040 H318"/>
+    <!-- app sends status -->
+    <path d="M1630 345 H1678"/>
+    <!-- panel calls the server -->
+    <path d="M1290 1040 H1338"/>
+    <!-- server <-> firebase -->
+    <path d="M2010 980 H2108"/>
+    <path d="M2120 1030 H2022"/>
+    <!-- status reports <-> firebase -->
+    <path d="M2210 605 V828"/>
+    <!-- push + SMS to students -->
+    <path d="M1690 770 V690 H175 V372"/>
+  </g>
+  <!-- inside module 1: sign-in -> map -> route -> guidance -->
+  <g stroke="#000" stroke-width="4" fill="none" marker-end="url(#a)">
+    <path d="M601 345 H617"/>
+    <path d="M906 345 H922"/>
+    <path d="M1201 345 H1217"/>
+  </g>
+</svg>
+<div class="note" style="left:560px;top:668px">Emergency alert to every student: push notification + SMS</div>
+<div class="note" style="left:2225px;top:690px;width:150px;text-align:left;padding:0">sign-in &amp; status sync</div>
+<div class="note" style="left:2010px;top:925px;width:110px;padding:0">sync</div>
+<div class="note" style="left:1288px;top:990px;width:62px;padding:0;font-size:22px">API</div>
+</body>
+</html>
